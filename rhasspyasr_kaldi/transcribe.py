@@ -1,17 +1,31 @@
+"""Automated speech recognition in Rhasspy using Kaldi."""
+import io
+import json
 import logging
 import struct
 import subprocess
 import tempfile
 import time
 import typing
+import wave
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
+from rhasspyasr import Transcriber, Transcription
 from kaldi_speech.nnet3 import KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder
 
-from .const import Transcriber, Transcription
-
 _LOGGER = logging.getLogger(__name__)
+
+# -----------------------------------------------------------------------------
+
+
+class KaldiModelType(str, Enum):
+    """Supported Kaldi model types."""
+
+    NNET3 = "nnet3"
+    GMM = "gmm"
+
 
 # -----------------------------------------------------------------------------
 
@@ -19,9 +33,11 @@ _LOGGER = logging.getLogger(__name__)
 class KaldiExtensionTranscriber(Transcriber):
     """Speech to text with Kaldi nnet3 Python extension."""
 
-    def __init__(self, model_dir: Path, graph_dir: Path):
-        self.model_dir = model_dir
-        self.graph_dir = graph_dir
+    def __init__(
+        self, model_dir: typing.Union[str, Path], graph_dir: typing.Union[str, Path]
+    ):
+        self.model_dir = Path(model_dir)
+        self.graph_dir = Path(graph_dir)
         self.model: typing.Optional[KaldiNNet3OnlineModel] = None
         self.decoder: typing.Optional[KaldiNNet3OnlineDecoder] = None
 
@@ -68,7 +84,7 @@ class KaldiExtensionTranscriber(Transcriber):
 
     def get_model_decoder(
         self
-    ) -> Tuple[KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder]:
+    ) -> typing.Tuple[KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder]:
         """Create nnet3 model/decoder using Python extension."""
         _LOGGER.debug(
             "Loading nnet3 model at %s (graph=%s)", self.model_dir, self.graph_dir
@@ -89,10 +105,15 @@ class KaldiExtensionTranscriber(Transcriber):
 class KaldiCommandLineTranscriber(Transcriber):
     """Speech to text with external Kaldi scripts."""
 
-    def __init__(self, model_type: KaldiModelType, model_dir: Path, graph_dir: Path):
+    def __init__(
+        self,
+        model_type: KaldiModelType,
+        model_dir: typing.Union[str, Path],
+        graph_dir: typing.Union[str, Path],
+    ):
         self.model_type = model_type
-        self.model_dir = model_dir
-        self.graph_dir = graph_dir
+        self.model_dir = Path(model_dir)
+        self.graph_dir = Path(graph_dir)
 
     def transcribe_wav(self, wav_data: bytes) -> typing.Optional[Transcription]:
         """Speech to text from WAV data."""

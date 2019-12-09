@@ -75,8 +75,10 @@ def find_dependencies():
         raise Exception("Failed to find libatlas.so.3. Please install libatlas3-base.")
 
     # Kaldi
-    machine = platform.machine()
-    kaldi_root = Path(f"build_{machine}/kaldi-master")
+    kaldi_root_file = Path("kaldiroot")
+    assert kaldi_root_file.is_file(), f"Missing {kaldi_root}"
+    kaldi_root = Path(kaldi_root_file.read_text().strip())
+
     if not kaldi_root.is_dir():
         raise Exception(f"Expected Kaldi root at {kaldi_root}")
 

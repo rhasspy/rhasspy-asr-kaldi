@@ -1,2 +1,7 @@
 __pycache__/
 .venv/
+dist/
+build/
+kaldi_speech/*.so
+*.egg-info/
+kaldiroot
