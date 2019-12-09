@@ -1,0 +1,6 @@
+attrs
+numpy
+rhasspy-asr
+
+flake8
+pylint
