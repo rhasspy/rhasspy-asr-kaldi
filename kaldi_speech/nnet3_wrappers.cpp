@@ -54,10 +54,10 @@ namespace kaldi {
 #if VERBOSE
         KALDI_LOG << "alloc: OnlineSilenceWeighting";
 #endif
-        silence_weighting = new OnlineSilenceWeighting (model->trans_model, 
+        silence_weighting = new OnlineSilenceWeighting (model->trans_model,
                                                         model->feature_info->silence_weighting_config,
                                                         model->decodable_opts.frame_subsampling_factor);
-        
+
 #if VERBOSE
         KALDI_LOG << "alloc: nnet3::DecodableNnetSimpleLoopedInfo";
 #endif
@@ -116,7 +116,7 @@ namespace kaldi {
             decoder = NULL;
         }
         if (feature_pipeline) {
-            delete feature_pipeline ; 
+            delete feature_pipeline ;
             feature_pipeline = NULL;
         }
     }
@@ -144,7 +144,7 @@ namespace kaldi {
         } else {
             ConvertLattice(best_path_clat, &best_path_lat);
         }
-            
+
         std::vector<int32> words;
         std::vector<int32> alignment;
         LatticeWeight      weight;
@@ -152,7 +152,7 @@ namespace kaldi {
         GetLinearSymbolSequence(best_path_lat, &alignment, &words, &weight);
         num_frames = alignment.size();
         likelihood = -(weight.Value1() + weight.Value2()) / num_frames;
-                   
+
         for (size_t i = 0; i < words.size(); i++) {
             std::string s = model->word_syms->Find(words[i]);
             if (s == "")
@@ -191,7 +191,7 @@ namespace kaldi {
                 // lattice-1best
 
                 CompactLattice best_path_aligned;
-                CompactLatticeShortestPath(aligned_clat, &best_path_aligned); 
+                CompactLatticeShortestPath(aligned_clat, &best_path_aligned);
 
                 // nbest-to-ctm
 
@@ -263,14 +263,14 @@ namespace kaldi {
             }
 
             CompactLatticeShortestPath(clat, &best_path_clat);
-            
+
             tot_frames_decoded = tot_frames;
             tot_frames         = 0;
 
             free_decoder();
 
         }
-        
+
         return true;
     }
 
@@ -286,13 +286,13 @@ namespace kaldi {
         // nothing - this handler simply keeps silent
     }
 
-    NNet3OnlineModelWrapper::NNet3OnlineModelWrapper(BaseFloat    beam,                       
+    NNet3OnlineModelWrapper::NNet3OnlineModelWrapper(BaseFloat    beam,
                                                      int32        max_active,
                                                      int32        min_active,
                                                      BaseFloat    lattice_beam,
-                                                     BaseFloat    acoustic_scale, 
+                                                     BaseFloat    acoustic_scale,
                                                      int32        frame_subsampling_factor,
-                                                     std::string &word_syms_filename, 
+                                                     std::string &word_syms_filename,
                                                      std::string &model_in_filename,
                                                      std::string &fst_in_str,
                                                      std::string &mfcc_config,
@@ -303,10 +303,10 @@ namespace kaldi {
 
         using namespace kaldi;
         using namespace fst;
-        
+
         typedef kaldi::int32 int32;
         typedef kaldi::int64 int64;
-    
+
 #if VERBOSE
         KALDI_LOG << "model_in_filename:         " << model_in_filename;
         KALDI_LOG << "fst_in_str:                " << fst_in_str;
@@ -345,7 +345,7 @@ namespace kaldi {
         decode_fst = fst::ReadFstKaldiGeneric(fst_in_str);
 
         word_syms = NULL;
-        if (word_syms_filename != "") 
+        if (word_syms_filename != "")
           if (!(word_syms = fst::SymbolTable::ReadText(word_syms_filename)))
             KALDI_ERR << "Could not read symbol table from file "
                        << word_syms_filename;
@@ -369,4 +369,3 @@ namespace kaldi {
     }
 
 }
-

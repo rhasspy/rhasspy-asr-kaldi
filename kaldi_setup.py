@@ -77,7 +77,7 @@ def find_dependencies():
     # Kaldi
     kaldi_root_file = Path("kaldiroot")
     assert kaldi_root_file.is_file(), f"Missing {kaldi_root}"
-    kaldi_root = Path(kaldi_root_file.read_text().strip())
+    kaldi_root = Path(os.path.expandvars(kaldi_root_file.read_text().strip()))
 
     if not kaldi_root.is_dir():
         raise Exception(f"Expected Kaldi root at {kaldi_root}")

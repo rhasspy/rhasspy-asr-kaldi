@@ -82,6 +82,57 @@ class KaldiExtensionTranscriber(Transcriber):
                 # Failure
                 return None
 
+    def transcribe_stream(
+        self, audio_stream: typing.Iterable[bytes], sample_rate: int, sample_width: int
+    ) -> typing.Optional[Transcription]:
+        """Speech to text from an audio stream."""
+        self.load_decoder()
+        assert self.decoder
+
+        start_time = time.perf_counter()
+        last_chunk: typing.Optional[bytes] = None
+        audio_iter = iter(audio_stream)
+        total_frames: int = 0
+        while True:
+            try:
+                next_chunk = next(audio_iter)
+
+                if last_chunk:
+                    # Don't finalize
+                    num_frames = len(last_chunk) // sample_width
+                    total_frames += num_frames
+                    samples = struct.unpack_from("<%dh" % num_frames, last_chunk)
+                    self.decoder.decode(
+                        sample_rate, np.array(samples, dtype=np.float32), False
+                    )
+
+                last_chunk = next_chunk
+            except StopIteration:
+                break
+
+        if last_chunk:
+            # Finalize
+            num_frames = len(last_chunk) // sample_width
+            total_frames += num_frames
+            samples = struct.unpack_from("<%dh" % num_frames, last_chunk)
+            success = self.decoder.decode(
+                sample_rate, np.array(samples, dtype=np.float32), True
+            )
+
+            if success:
+                text, likelihood = self.decoder.get_decoded_string()
+                transcribe_seconds = time.perf_counter() - start_time
+
+                return Transcription(
+                    text=text.strip(),
+                    likelihood=likelihood,
+                    transcribe_seconds=transcribe_seconds,
+                    wav_seconds=total_frames / float(sample_rate),
+                )
+
+        # Failure
+        return None
+
     def get_model_decoder(
         self
     ) -> typing.Tuple[KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder]:
@@ -147,6 +198,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # Get result back as JSON
             result_json, _ = kaldi_proc.communicate()
+            _LOGGER.debug(result_json)
             result = json.loads(result_json)
 
             # Empty string indicates failure

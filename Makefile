@@ -2,11 +2,11 @@ SHELL := bash
 
 .PHONY: check virtualenv dist
 
-virtualenv:
+venv:
+	rm -rf .venv/
 	python3 -m venv .venv
-	source .venv/bin/activate
-	python3 -m pip install wheel setuptools
-	python3 -m pip install -r requirements
+	.venv/bin/pip3 install wheel setuptools
+	.venv/bin/pip3 install -r requirements_all.txt
 
 check:
 	flake8 rhasspyasr_kaldi/*.py
