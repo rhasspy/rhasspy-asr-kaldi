@@ -1,4 +1,4 @@
 attrs==19.3.0
 numpy==1.18.0
 cython==0.29.14
-rhasspy-asr==0.1.0
+rhasspy-asr==0.1.1

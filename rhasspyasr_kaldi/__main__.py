@@ -102,6 +102,7 @@ def main():
                 audio_stream(wav_file, args.frames_in_chunk),
                 wav_file.getframerate(),
                 wav_file.getsampwidth(),
+                wav_file.getnchannels(),
             )
 
             print_json(result)

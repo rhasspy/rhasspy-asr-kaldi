@@ -13,6 +13,8 @@ from pathlib import Path
 
 import numpy as np
 from rhasspyasr import Transcriber, Transcription
+
+# pylint: disable=E0401,E0611
 from kaldi_speech.nnet3 import KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,9 +85,14 @@ class KaldiExtensionTranscriber(Transcriber):
                 return None
 
     def transcribe_stream(
-        self, audio_stream: typing.Iterable[bytes], sample_rate: int, sample_width: int
+        self,
+        audio_stream: typing.Iterable[bytes],
+        sample_rate: int,
+        sample_width: int,
+        channels: int,
     ) -> typing.Optional[Transcription]:
         """Speech to text from an audio stream."""
+        assert channels == 1, "Only mono audio supported"
         self.load_decoder()
         assert self.decoder
 
@@ -214,3 +221,25 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # Failure
             return None
+
+    def transcribe_stream(
+        self,
+        audio_stream: typing.Iterable[bytes],
+        sample_rate: int,
+        sample_width: int,
+        channels: int,
+    ) -> typing.Optional[Transcription]:
+        """Speech to text from an audio stream."""
+        with io.BytesIO() as wav_buffer:
+            # Can't stream to command-line.
+            # Re-package as a WAV.
+            wav_file: wave.Wave_write = wave.open(wav_buffer, "wb")
+            with wav_file:
+                wav_file.setframerate(sample_rate)
+                wav_file.setsampwidth(sample_width)
+                wav_file.setnchannels(channels)
+
+                for frame in audio_stream:
+                    wav_file.writeframes(frame)
+
+            return self.transcribe_wav(wav_buffer.getvalue())
