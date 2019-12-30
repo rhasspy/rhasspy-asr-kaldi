@@ -11,6 +11,7 @@ venv:
 check:
 	flake8 rhasspyasr_kaldi/*.py
 	pylint rhasspyasr_kaldi/*.py
+	mypy rhasspyasr_kaldi/*.py
 
 dist:
 	rm -rf dist/

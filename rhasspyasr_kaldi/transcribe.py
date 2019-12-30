@@ -166,6 +166,14 @@ class KaldiExtensionTranscriber(Transcriber):
 
         return decoder
 
+    def __repr__(self) -> str:
+        return (
+            "KaldiExtensionTranscriber("
+            f", model_dir={self.model_dir}"
+            f", graph_dir={self.graph_dir}"
+            ")"
+        )
+
 
 # -----------------------------------------------------------------------------
 
@@ -253,3 +261,12 @@ class KaldiCommandLineTranscriber(Transcriber):
                     wav_file.writeframes(frame)
 
             return self.transcribe_wav(wav_buffer.getvalue())
+
+    def __repr__(self) -> str:
+        return (
+            "KaldiCommandLineTranscriber("
+            f"model_type={self.model_type}"
+            f", model_dir={self.model_dir}"
+            f", graph_dir={self.graph_dir}"
+            ")"
+        )
