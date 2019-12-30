@@ -171,6 +171,7 @@ setuptools.setup(
     ext_modules=ext_modules,
     include_dirs=[numpy.get_include()],
     packages=setuptools.find_packages(),
+    package_data={"rhasspyasr_kaldi": ["py.typed"]},
     install_requires=requirements,
     classifiers=[
         "Operating System :: POSIX :: Linux",
