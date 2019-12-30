@@ -13,5 +13,7 @@ check:
 	pylint rhasspyasr_kaldi/*.py
 
 dist:
+	rm -rf dist/
+	python3 kaldi_setup.py build_ext
 	python3 setup.py bdist_wheel
-	bash bin/fix_rpath.sh `cat kaldiroot` dist/rhasspy*.whl
+	bash bin/fix_rpath.sh "$(shell cat kaldiroot | envsubst)" dist/rhasspy*.whl

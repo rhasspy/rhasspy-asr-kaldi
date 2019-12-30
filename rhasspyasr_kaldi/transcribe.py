@@ -45,9 +45,11 @@ class KaldiExtensionTranscriber(Transcriber):
 
     def load_decoder(self):
         """Load Kaldi decoder if not already loaded."""
-        if (self.model is None) or (self.decoder is None):
-            # Load model/decoder
-            self.model, self.decoder = self.get_model_decoder()
+        if self.model is None:
+            self.model = self.get_model()
+
+        if self.decoder is None:
+            self.decoder = self.get_decoder(self.model)
 
     def transcribe_wav(self, wav_data: bytes) -> typing.Optional[Transcription]:
         """Speech to text from WAV data."""
@@ -117,44 +119,52 @@ class KaldiExtensionTranscriber(Transcriber):
             except StopIteration:
                 break
 
-        if last_chunk:
-            # Finalize
-            num_frames = len(last_chunk) // sample_width
-            total_frames += num_frames
-            samples = struct.unpack_from("<%dh" % num_frames, last_chunk)
-            success = self.decoder.decode(
-                sample_rate, np.array(samples, dtype=np.float32), True
+        if not last_chunk:
+            # Add one empty frame for finalization
+            last_chunk = bytes([0] * sample_width)
+
+        # Finalize
+        num_frames = len(last_chunk) // sample_width
+        total_frames += num_frames
+        samples = struct.unpack_from("<%dh" % num_frames, last_chunk)
+        success = self.decoder.decode(
+            sample_rate, np.array(samples, dtype=np.float32), True
+        )
+
+        if success:
+            text, likelihood = self.decoder.get_decoded_string()
+            transcribe_seconds = time.perf_counter() - start_time
+
+            return Transcription(
+                text=text.strip(),
+                likelihood=likelihood,
+                transcribe_seconds=transcribe_seconds,
+                wav_seconds=total_frames / float(sample_rate),
             )
-
-            if success:
-                text, likelihood = self.decoder.get_decoded_string()
-                transcribe_seconds = time.perf_counter() - start_time
-
-                return Transcription(
-                    text=text.strip(),
-                    likelihood=likelihood,
-                    transcribe_seconds=transcribe_seconds,
-                    wav_seconds=total_frames / float(sample_rate),
-                )
 
         # Failure
         return None
 
-    def get_model_decoder(
-        self
-    ) -> typing.Tuple[KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder]:
-        """Create nnet3 model/decoder using Python extension."""
+    def get_model(self) -> KaldiNNet3OnlineModel:
+        """Create nnet3 model using Python extension."""
         _LOGGER.debug(
             "Loading nnet3 model at %s (graph=%s)", self.model_dir, self.graph_dir
         )
 
         model = KaldiNNet3OnlineModel(str(self.model_dir), str(self.graph_dir))
+        _LOGGER.debug("Kaldi model loaded")
+        return model
+
+    def get_decoder(
+        self, model: typing.Optional[KaldiNNet3OnlineModel] = None
+    ) -> KaldiNNet3OnlineDecoder:
+        """Create nnet3 decoder using Python extension."""
 
         _LOGGER.debug("Creating decoder")
-        decoder = KaldiNNet3OnlineDecoder(model)
+        decoder = KaldiNNet3OnlineDecoder(model or self.model)
         _LOGGER.debug("Kaldi decoder loaded")
 
-        return model, decoder
+        return decoder
 
 
 # -----------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+"""Setup for Kaldi nnet3 extension"""
 import os
 import sys
 import platform
@@ -151,9 +152,14 @@ cmdclass.update({"build_ext": build_ext})
 
 # -----------------------------------------------------------------------------
 
+this_dir = os.path.abspath(os.path.dirname(__file__))
+
+with open(os.path.join(this_dir, "VERSION"), "r") as version_file:
+    version = version_file.read().strip()
+
 setup(
     name="kaldi-speech",
-    version="0.1.0",
+    version=version,
     description="Simple Python/Cython interface to kaldi-asr nnet3/chain decoders",
     author="Guenter Bartsch",
     author_email="guenter@zamia.org",
