@@ -166,7 +166,7 @@ setuptools.setup(
     version=version,
     author="Michael Hansen",
     author_email="hansen.mike@gmail.com",
-    url="https://github.com/synesthesiam/rhasspy-asr-kaldi",
+    url="https://github.com/rhasspy/rhasspy-asr-kaldi",
     cmdclass=cmdclass,
     ext_modules=ext_modules,
     include_dirs=[numpy.get_include()],

@@ -6,7 +6,8 @@ venv:
 	rm -rf .venv/
 	python3 -m venv .venv
 	.venv/bin/pip3 install wheel setuptools
-	.venv/bin/pip3 install -r requirements_all.txt
+	.venv/bin/pip3 install -r requirements.txt
+	.venv/bin/pip3 install -r requirements_dev.txt
 
 check:
 	flake8 rhasspyasr_kaldi/*.py
