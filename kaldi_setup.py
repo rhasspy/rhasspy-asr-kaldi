@@ -92,7 +92,6 @@ def find_dependencies():
         "fst",
         "kaldi-base",
         "kaldi-chain",
-        "kaldi-cudamatrix",
         "kaldi-decoder",
         "kaldi-feat",
         "kaldi-fstext",
