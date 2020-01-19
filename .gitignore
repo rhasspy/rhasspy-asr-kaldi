@@ -6,3 +6,4 @@ build/
 kaldi_speech/*.so
 *.egg-info/
 kaldiroot
+.vscode/

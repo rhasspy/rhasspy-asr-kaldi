@@ -1,15 +1,15 @@
 """Command-line interface to rhasspy-asr-kaldi"""
 import argparse
-import logging
-import sys
 import json
+import logging
 import os
+import sys
 import wave
 from pathlib import Path
 
 import attr
 
-from . import KaldiExtensionTranscriber, KaldiCommandLineTranscriber
+from . import KaldiCommandLineTranscriber, KaldiExtensionTranscriber
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -15,7 +15,7 @@ import numpy as np
 from rhasspyasr import Transcriber, Transcription
 
 # pylint: disable=E0401,E0611
-from kaldi_speech.nnet3 import KaldiNNet3OnlineModel, KaldiNNet3OnlineDecoder
+from kaldi_speech.nnet3 import KaldiNNet3OnlineDecoder, KaldiNNet3OnlineModel
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -1,12 +1,12 @@
 """Setup for Kaldi nnet3 extension"""
 import os
-import sys
 import platform
+import sys
 from pathlib import Path
-from setuptools import setup, Extension
 
 import numpy
 from Cython.Distutils import build_ext
+from setuptools import Extension, setup
 
 cmdclass = {}
 ext_modules = []
