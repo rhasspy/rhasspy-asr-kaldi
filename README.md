@@ -1,5 +1,8 @@
 # Rhasspy ASR Kaldi
 
+[![Continous Integration](https://github.com/rhasspy/rhasspy-asr-kaldi/workflows/Tests/badge.svg)](https://github.com/rhasspy/rhasspy-asr-kaldi/actions)
+[![GitHub license](https://img.shields.io/github/license/rhasspy/rhasspy-asr-kaldi.svg)](https://github.com/rhasspy/rhasspy-asr-kaldi/blob/master/LICENSE)
+
 Automated speech recognition in [Rhasspy](https://github.com/synesthesiam/rhasspy) voice assistant with [Kaldi](http://kaldi-asr.org).
 
 ## Transcribing
