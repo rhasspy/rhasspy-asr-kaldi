@@ -1,9 +1,10 @@
 SHELL := bash
+PYTHON_NAME = rhasspyasr_kaldi
 
-PYTHON_FILES = rhasspyasr_kaldi/*.py *.py
+PYTHON_FILES = $(PYTHON_NAME)/*.py *.py
 SHELL_FILES = bin/* *.sh
 
-.PHONY: reformat check virtualenv dist
+.PHONY: reformat check venv dist
 
 reformat:
 	black .
@@ -12,7 +13,7 @@ reformat:
 venv:
 	rm -rf .venv/
 	python3 -m venv .venv
-	.venv/bin/pip3 install --upgrade pip	
+	.venv/bin/pip3 install --upgrade pip
 	.venv/bin/pip3 install wheel setuptools
 	.venv/bin/pip3 install -r requirements.txt
 	.venv/bin/pip3 install -r requirements_dev.txt

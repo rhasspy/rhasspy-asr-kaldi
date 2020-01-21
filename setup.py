@@ -1,6 +1,6 @@
+"""Setup for rhasspyasr_kaldi"""
 import os
-import platform
-import sys
+import typing
 from pathlib import Path
 
 import numpy
@@ -8,12 +8,13 @@ import setuptools
 from Cython.Distutils import build_ext
 
 cmdclass = {}
-ext_modules = []
+ext_modules: typing.List[setuptools.Extension] = []
 
 # -----------------------------------------------------------------------------
 
 
 def find_dependencies():
+    """Locate ATLAS and Kaldi libraries."""
     include_dirs = []
     library_dirs = []
     libraries = []
@@ -36,7 +37,7 @@ def find_dependencies():
 
     if not atlas_include_found:
         raise Exception(
-            f"Missing ATLAS include directory ({atlas_include}). Please install libatlas-base-dev."
+            f"Missing ATLAS include directory ({atlas_include_dir}). Please install libatlas-base-dev."
         )
 
     # Find libatlas.so.3
@@ -76,7 +77,7 @@ def find_dependencies():
 
     # Kaldi
     kaldi_root_file = Path("kaldiroot")
-    assert kaldi_root_file.is_file(), f"Missing {kaldi_root}"
+    assert kaldi_root_file.is_file(), f"Missing {kaldi_root_file}"
     kaldi_root = Path(os.path.expandvars(kaldi_root_file.read_text().strip()))
 
     if not kaldi_root.is_dir():
@@ -91,7 +92,6 @@ def find_dependencies():
         "fst",
         "kaldi-base",
         "kaldi-chain",
-        "kaldi-cudamatrix",
         "kaldi-decoder",
         "kaldi-feat",
         "kaldi-fstext",
