@@ -7,3 +7,15 @@ kaldi_speech/*.so
 *.egg-info/
 kaldiroot
 .vscode/
+
+rhasspyasr_kaldi/kaldi/
+rhasspyasr_pocketsphinx/estimate-ngram
+rhasspyasr_pocketsphinx/libmitlm.so.1
+rhasspyasr_pocketsphinx/phonetisaurus-apply
+rhasspyasr_pocketsphinx/phonetisaurus-g2pfst
+rhasspyasr_pocketsphinx/libfst.so.13
+rhasspyasr_pocketsphinx/libfstfar.so.13
+rhasspyasr_pocketsphinx/libfstngram.so.13
+
+mitlm-0.4.2-*.tar.gz
+phonetisaurus-2019-*.tar.gz

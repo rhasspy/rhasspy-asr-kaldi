@@ -1,0 +1,3 @@
+egs/wsj/s5/steps/online/nnet3/decode.sh
+egs/wsj/s5/steps/online/nnet3/prepare_online_decoding.sh
+egs/wsj/s5/utils

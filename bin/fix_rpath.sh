@@ -25,7 +25,6 @@ cp "${kaldi}"/tools/openfst/lib/libfst.so* "${temp_dir}/kaldi_speech/"
 kaldi_libs=(
     'kaldi-base'
     'kaldi-chain'
-    'kaldi-cudamatrix'
     'kaldi-decoder'
     'kaldi-feat'
     'kaldi-fstext'
