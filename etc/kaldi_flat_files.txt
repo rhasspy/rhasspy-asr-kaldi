@@ -18,7 +18,9 @@ src/fstbin/fsttablecompose
 src/gmmbin/gmm-latgen-faster
 src/lib
 src/lmbin/arpa2fst
+src/online2bin/online2-tcp-nnet3-decode-faster
 src/online2bin/online2-wav-nnet3-latgen-faster
+src/online2bin/online2-wav-gmm-latgen-faster
 tools/openfst/bin/fstarcsort
 tools/openfst/bin/fstcompile
 tools/openfst/bin/fstcompose

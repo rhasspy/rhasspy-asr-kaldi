@@ -1,6 +1,8 @@
 """Methods for generating ASR artifacts."""
 import logging
+import os
 import re
+import shutil
 import subprocess
 import tempfile
 import typing
@@ -31,9 +33,10 @@ class MissingWordPronunciationsException(Exception):
 def train(
     graph_dict: typing.Dict[str, typing.Any],
     base_dictionaries: typing.Sequence[typing.Union[str, Path]],
-    kaldi_dir: typing.Union[str, Path],
     model_dir: typing.Union[str, Path],
     graph_dir: typing.Union[str, Path],
+    dictionary: typing.Optional[typing.Union[str, Path]] = None,
+    language_model: typing.Optional[typing.Union[str, Path]] = None,
     dictionary_word_transform: typing.Optional[typing.Callable[[str], str]] = None,
     g2p_model: typing.Optional[typing.Union[str, Path]] = None,
     g2p_word_transform: typing.Optional[typing.Callable[[str], str]] = None,
@@ -82,6 +85,11 @@ def train(
 
                 _LOGGER.debug(ngram_command)
                 subprocess.check_call(ngram_command)
+                lm_file.seek(0)
+
+                if language_model:
+                    shutil.copy(lm_file.name, language_model)
+                    _LOGGER.debug("Wrote language model to %s", str(language_model))
 
                 # Extract vocabulary
                 vocab_file.seek(0)
@@ -162,26 +170,120 @@ def train(
                             phonemes = " ".join(parts[1:]).strip()
                             print(word, phonemes, file=dict_file)
 
+            dict_file.seek(0)
+            if dictionary:
+                shutil.copy(dict_file.name, dictionary)
+                _LOGGER.debug("Wrote dictionary to %s", str(dictionary))
+
+            # ---------------------------------------------------------
+            # 1. prepare_lang.sh
+            # 2. format_lm.sh
+            # 3. mkgraph.sh
+            # 4. prepare_online_decoding.sh
             # ---------------------------------------------------------
 
-            train_command = [
-                str(_DIR / "kaldi-train"),
-                "--kaldi-dir",
-                str(kaldi_dir),
-                "--model-type",
-                "nnet3",
-                "--model-dir",
-                str(model_dir),
-                "--graph-dir",
-                str(graph_dir),
-                "--dictionary",
-                dict_file.name,
-                "--language-model",
-                lm_file.name,
+            # Delete existing data/graph
+            data_dir = model_dir / "data"
+            if data_dir.exists():
+                shutil.rmtree(data_dir)
+
+            if graph_dir.exists():
+                shutil.rmtree(graph_dir)
+
+            _LOGGER.debug("Generating lexicon")
+            dict_dir = data_dir / "local" / "dict"
+            dict_dir.mkdir(parents=True, exist_ok=True)
+
+            # Copy phones
+            phones_dir = model_dir / "phones"
+            for phone_file in phones_dir.glob("*.txt"):
+                shutil.copy(phone_file, dict_dir / phone_file.name)
+
+            # Copy dictionary
+            shutil.copy(dict_file.name, dict_dir / "lexicon.txt")
+
+            # Create utils link
+            egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
+            model_utils_link = model_dir / "utils"
+            if model_utils_link.exists():
+                model_utils_link.unlink()
+
+            model_utils_link.symlink_to(egs_utils_dir, target_is_directory=True)
+
+            # 1. prepare_lang.sh
+            lang_dir = data_dir / "lang"
+            prepare_lang = [
+                "bash",
+                str(egs_utils_dir / "prepare_lang.sh"),
+                str(dict_dir),
+                "",
+                str(data_dir / "local" / "lang"),
+                str(lang_dir),
             ]
 
-            _LOGGER.debug(train_command)
-            subprocess.check_call(train_command)
+            _LOGGER.debug(prepare_lang)
+            subprocess.check_call(prepare_lang, cwd=model_dir)
+
+            # 2. format_lm.sh
+            lm_arpa = data_dir / "local" / "lang" / "lm.arpa"
+            lm_arpa.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(lm_file.name, lm_arpa)
+
+            gzip_lm = ["gzip", str(lm_arpa)]
+            _LOGGER.debug(gzip_lm)
+            subprocess.check_call(gzip_lm, cwd=lm_arpa.parent)
+
+            format_lm = [
+                "bash",
+                str(egs_utils_dir / "format_lm.sh"),
+                str(lang_dir),
+                str(lm_arpa.with_suffix(".arpa.gz")),
+                str(dict_dir / "lexicon.txt"),
+                str(lang_dir),
+            ]
+
+            _LOGGER.debug(format_lm)
+            subprocess.check_call(format_lm, cwd=model_dir)
+
+            # 3. mkgraph.sh
+            mkgraph = [
+                "bash",
+                str(egs_utils_dir / "mkgraph.sh"),
+                str(lang_dir),
+                str(model_dir / "model"),
+                str(graph_dir),
+            ]
+            _LOGGER.debug(mkgraph)
+            subprocess.check_call(mkgraph, cwd=model_dir)
+
+            # 4. prepare_online_decoding.sh
+            extractor_dir = model_dir / "extractor"
+            if extractor_dir.is_dir():
+                egs_steps_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "steps"
+                prepare_online_decoding = [
+                    "bash",
+                    str(
+                        egs_steps_dir
+                        / "online"
+                        / "nnet3"
+                        / "prepare_online_decoding.sh"
+                    ),
+                    str(lang_dir),
+                    str(extractor_dir),
+                    str(model_dir / "model"),
+                    str(model_dir / "online"),
+                ]
+
+                _LOGGER.debug(prepare_online_decoding)
+                prepare_online_decoding_env = os.environ.copy()
+                prepare_online_decoding_env["PATH"] = (
+                    str(egs_utils_dir) + ":" + prepare_online_decoding_env["PATH"]
+                )
+                subprocess.check_call(
+                    prepare_online_decoding,
+                    cwd=model_dir,
+                    env=prepare_online_decoding_env,
+                )
 
 
 # -----------------------------------------------------------------------------

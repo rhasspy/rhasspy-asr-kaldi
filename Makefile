@@ -3,11 +3,16 @@ PYTHON_NAME = rhasspyasr_kaldi
 
 PYTHON_FILES = $(PYTHON_NAME)/*.py *.py
 SHELL_FILES = bin/* *.sh
+PIP_INSTALL ?= install
 
 architecture := $(shell bash architecture.sh)
 platform = $(shell sh platform.sh)
 
 .PHONY: reformat check venv venv-init dist
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
 
 reformat:
 	black .
@@ -26,50 +31,30 @@ check:
 venv-init: mitlm-0.4.2-$(architecture).tar.gz phonetisaurus-2019-$(architecture).tar.gz
 	rm -rf .venv/
 	python3 -m venv .venv
-	.venv/bin/pip3 install --upgrade pip
-	.venv/bin/pip3 install wheel setuptools
-	.venv/bin/pip3 install -r requirements.txt
-	tar -C $(PYTHON_NAME)/ -xvf mitlm-0.4.2-$(architecture).tar.gz \
-      --strip-components=2 \
-      mitlm/bin/estimate-ngram mitlm/lib/libmitlm.so.1
-	patchelf --set-rpath '$$ORIGIN' $(PYTHON_NAME)/estimate-ngram
-	tar -C $(PYTHON_NAME)/ -xvf phonetisaurus-2019-$(architecture).tar.gz \
-	  --strip-components=2 \
-      ./bin/phonetisaurus-apply ./bin/phonetisaurus-g2pfst \
-      ./lib/libfst.so.13.0.0 ./lib/libfstfar.so.13.0.0 ./lib/libfstngram.so.13.0.0
-	patchelf --set-rpath '$$ORIGIN' $(PYTHON_NAME)/phonetisaurus-g2pfst
-	for f in libfst.so.13 libfstfar.so.13 libfstngram.so.13; do \
-      mv $(PYTHON_NAME)/$${f}.0.0 $(PYTHON_NAME)/$${f}; \
-      patchelf --set-rpath '$$ORIGIN' $(PYTHON_NAME)/$${f}; done
+	.venv/bin/pip3 $(PIP_INSTALL) --upgrade pip
+	.venv/bin/pip3 $(PIP_INSTALL) wheel setuptools
+	.venv/bin/pip3 $(PIP_INSTALL) -r requirements.txt
+	.venv/bin/pip3 $(PIP_INSTALL) -r requirements_dev.txt
+	scripts/install-mitlm.sh \
+        "${CURDIR}/mitlm-0.4.2-$(architecture).tar.gz" \
+        "${CURDIR}/${PYTHON_NAME}"
+	scripts/install-phonetisaurus.sh \
+        "${CURDIR}/phonetisaurus-2019-$(architecture).tar.gz" \
+        "${CURDIR}/${PYTHON_NAME}"
 
-venv: venv-init kaldiroot etc/kaldi_dir_files.txt etc/kaldi_flat_files.txt
-	rm -rf $(PYTHON_NAME)/kaldi
-	mkdir -p $(PYTHON_NAME)/kaldi
-	while read -r path_part; do \
-      input_path=$(shell cat kaldiroot)/$${path_part}; \
-      output_path=$(PYTHON_NAME)/kaldi/; \
-      if [[ -d $${input_path} ]]; then \
-        cp --recursive --dereference $${input_path}/* $${output_path}/; \
-      else \
-        cp $${input_path} $${output_path}/; \
-      fi; done < etc/kaldi_flat_files.txt
-	find $(PYTHON_NAME)/kaldi -type f -exec patchelf --set-rpath '$$ORIGIN' {} \;
-	while read -r path_part; do \
-      input_path=$(shell cat kaldiroot)/$${path_part}; \
-      output_path=$(PYTHON_NAME)/kaldi/$${path_part}/; \
-      mkdir -p $${output_path}/; \
-      if [[ -d $${input_path} ]]; then \
-        cp --recursive --dereference $${input_path}/* $${output_path}/; \
-      else \
-        cp $${input_path} $${output_path}/; \
-      fi; done < etc/kaldi_dir_files.txt
+venv: venv-init kaldiroot etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
+	scripts/install-kaldi.sh \
+        "$(shell cat kaldiroot | envsubst)" \
+        "${CURDIR}/etc/kaldi_flat_files.txt" \
+        "${CURDIR}/etc/kaldi_dir_files.txt" \
+        "${CURDIR}/${PYTHON_NAME}"
+	.venv/bin/python3 kaldi_setup.py build_ext
+	find build/ -type f -name 'nnet3*.so' -exec cp {} "$(PYTHON_NAME)/" \;
+	find "$(PYTHON_NAME)" -type f -name 'nnet3*.so' -exec patchelf --set-rpath '$$ORIGIN' {} \;
 
-
-dist:
+dist: kaldiroot
 	rm -rf dist/
-	python3 kaldi_setup.py build_ext
 	python3 setup.py bdist_wheel --plat-name $(platform)
-	bash bin/fix_rpath.sh "$(shell cat kaldiroot | envsubst)" dist/rhasspy*.whl
 
 # -----------------------------------------------------------------------------
 # Downloads

@@ -9,13 +9,13 @@ kaldiroot
 .vscode/
 
 rhasspyasr_kaldi/kaldi/
-rhasspyasr_pocketsphinx/estimate-ngram
-rhasspyasr_pocketsphinx/libmitlm.so.1
-rhasspyasr_pocketsphinx/phonetisaurus-apply
-rhasspyasr_pocketsphinx/phonetisaurus-g2pfst
-rhasspyasr_pocketsphinx/libfst.so.13
-rhasspyasr_pocketsphinx/libfstfar.so.13
-rhasspyasr_pocketsphinx/libfstngram.so.13
+rhasspyasr_kaldi/estimate-ngram
+rhasspyasr_kaldi/libmitlm.so.1
+rhasspyasr_kaldi/phonetisaurus-apply
+rhasspyasr_kaldi/phonetisaurus-g2pfst
+rhasspyasr_kaldi/libfst.so.13
+rhasspyasr_kaldi/libfstfar.so.13
+rhasspyasr_kaldi/libfstngram.so.13
 
 mitlm-0.4.2-*.tar.gz
 phonetisaurus-2019-*.tar.gz
