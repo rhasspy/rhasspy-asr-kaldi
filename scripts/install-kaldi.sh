@@ -30,9 +30,6 @@ done < "${flat_files}"
 # Fix rpaths (assume flat files are bin/libs)
 find "${output}/kaldi" -type f -exec patchelf --set-rpath '$ORIGIN' {} \;
 
-# Exclude CUDA libs
-rm -f "${output}/kaldi"/libkaldi-cuda*
-
 # Dir files (keep directory structure)
 while read -r path_part
 do
