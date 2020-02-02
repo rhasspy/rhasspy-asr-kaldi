@@ -165,10 +165,9 @@ def train(
                     for line in g2p_lines:
                         line = line.strip()
                         if line:
-                            parts = line.split()
-                            word = parts[0].strip()
-                            phonemes = " ".join(parts[1:]).strip()
-                            print(word, phonemes, file=dict_file)
+                            word, *parts = line.split()
+                            phonemes = " ".join(parts).strip()
+                            print(word.strip(), phonemes, file=dict_file)
 
             dict_file.seek(0)
             if dictionary:
@@ -304,14 +303,10 @@ def read_dict(
 
         try:
             # Use explicit whitespace (avoid 0xA0)
-            parts = re.split(r"[ \t]+", line)
-            word = parts[0]
+            word, *parts = re.split(r"[ \t]+", line)
 
-            idx = word.find("(")
-            if idx > 0:
-                word = word[:idx]
-
-            pronounce = " ".join(parts[1:])
+            word = word.split("(")[0]
+            pronounce = " ".join(parts)
 
             if word in word_dict:
                 word_dict[word].append(pronounce)
