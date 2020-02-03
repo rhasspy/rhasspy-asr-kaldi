@@ -3,7 +3,6 @@ import os
 import typing
 from pathlib import Path
 
-import numpy
 import setuptools
 
 # -----------------------------------------------------------------------------
@@ -43,7 +42,6 @@ setuptools.setup(
     author_email="hansen.mike@gmail.com",
     url="https://github.com/rhasspy/rhasspy-asr-kaldi",
     dist_class=BinaryDistribution,
-    include_dirs=[numpy.get_include()],
     packages=setuptools.find_packages(),
     package_data={
         "rhasspyasr_kaldi": [
@@ -63,8 +61,6 @@ setuptools.setup(
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
-        # "Programming Language :: Cython",
-        # "Programming Language :: C++",
     ],
     long_description=long_description,
     long_description_content_type="text/markdown",

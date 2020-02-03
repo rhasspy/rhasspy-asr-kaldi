@@ -4,11 +4,11 @@ import json
 import logging
 import os
 import sys
+import typing
 import wave
 from pathlib import Path
 
 import attr
-from rhasspyasr import Transcriber
 
 from . import KaldiCommandLineTranscriber, train as kaldi_train
 
@@ -97,6 +97,12 @@ def get_args() -> argparse.Namespace:
         "--dictionary", help="Path to write custom pronunciation dictionary"
     )
     train_parser.add_argument(
+        "--dictionary-casing",
+        choices=["upper", "lower", "ignore"],
+        default="ignore",
+        help="Case transformation for dictionary words (training, default: ignore)",
+    )
+    train_parser.add_argument(
         "--language-model", help="Path to write custom language model"
     )
     train_parser.add_argument(
@@ -107,6 +113,12 @@ def get_args() -> argparse.Namespace:
     )
     train_parser.add_argument(
         "--g2p-model", help="Path to Phonetisaurus grapheme-to-phoneme FST model"
+    )
+    train_parser.add_argument(
+        "--g2p-casing",
+        choices=["upper", "lower", "ignore"],
+        default="ignore",
+        help="Case transformation for g2p words (training, default: ignore)",
     )
 
     return parser.parse_args()
@@ -214,16 +226,28 @@ def train(args: argparse.Namespace):
 
         graph_dict = json.load(sys.stdin)
 
-    # TODO: Add dictionary/g2p casing
     kaldi_train(
         graph_dict,
         args.base_dictionary,
         args.model_dir,
         args.graph_dir,
-        g2p_model=args.g2p_model,
+        dictionary_word_transform=get_word_transform(args.dictionary_casing),
         dictionary=args.dictionary,
         language_model=args.language_model,
+        g2p_model=args.g2p_model,
+        g2p_word_transform=get_word_transform(args.g2p_casing),
     )
+
+
+def get_word_transform(name: str) -> typing.Callable[[str], str]:
+    """Gets a word transformation function by name."""
+    if name == "upper":
+        return str.upper
+
+    if name == "lower":
+        return str.lower
+
+    return lambda s: s
 
 
 # -----------------------------------------------------------------------------
