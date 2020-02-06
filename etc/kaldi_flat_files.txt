@@ -16,6 +16,7 @@ src/fstbin/fstrmepslocal
 src/fstbin/fstrmsymbols
 src/fstbin/fsttablecompose
 src/gmmbin/gmm-latgen-faster
+src/latbin/lattice-best-path
 src/lib
 src/lmbin/arpa2fst
 src/online2bin/online2-tcp-nnet3-decode-faster

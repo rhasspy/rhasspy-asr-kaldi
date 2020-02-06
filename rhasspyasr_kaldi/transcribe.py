@@ -52,41 +52,11 @@ class KaldiCommandLineTranscriber(Transcriber):
             wav_file.seek(0)
 
             if self.model_type == KaldiModelType.NNET3:
-                online_conf = self.model_dir / "online" / "conf" / "online.conf"
-                kaldi_cmd = [
-                    str(_DIR / "kaldi" / "online2-wav-nnet3-latgen-faster"),
-                    "--online=false",
-                    "--do-endpointing=false",
-                    f"--word-symbol-table={words_txt}",
-                    f"--config={online_conf}",
-                    str(self.model_dir / "model" / "final.mdl"),
-                    str(self.graph_dir / "HCLG.fst"),
-                    "ark:echo utt1 utt1|",
-                    f"scp:echo utt1 {wav_file.name}|",
-                    "ark:/dev/null",
-                ]
+                text = self._transcribe_wav_nnet3(wav_file.name)
             elif self.model_type == KaldiModelType.GMM:
-                # TODO: online2-wav-gmm-latgen-faster
-                pass
+                text = self._transcribe_wav_gmm(wav_file.name)
             else:
                 raise ValueError(self.model_type)
-
-            _LOGGER.debug(kaldi_cmd)
-
-            try:
-                lines = subprocess.check_output(
-                    kaldi_cmd, stderr=subprocess.STDOUT, universal_newlines=True
-                ).splitlines()
-            except subprocess.CalledProcessError as e:
-                _LOGGER.exception("transcribe_wav")
-                _LOGGER.error(e.output)
-                lines = []
-
-            text = ""
-            for line in lines:
-                if line.startswith("utt1 "):
-                    text = line.split(maxsplit=1)[1]
-                    break
 
         if text:
             # Success
@@ -101,6 +71,119 @@ class KaldiCommandLineTranscriber(Transcriber):
 
         # Failure
         return None
+
+    def _transcribe_wav_nnet3(self, wav_path: str) -> str:
+        online_conf = self.model_dir / "online" / "conf" / "online.conf"
+        kaldi_cmd = [
+            str(_DIR / "kaldi" / "online2-wav-nnet3-latgen-faster"),
+            "--online=false",
+            "--do-endpointing=false",
+            f"--word-symbol-table={words_txt}",
+            f"--config={online_conf}",
+            str(self.model_dir / "model" / "final.mdl"),
+            str(self.graph_dir / "HCLG.fst"),
+            "ark:echo utt1 utt1|",
+            f"scp:echo utt1 {wav_path}|",
+            "ark:/dev/null",
+        ]
+        _LOGGER.debug(kaldi_cmd)
+
+        try:
+            lines = subprocess.check_output(
+                kaldi_cmd, stderr=subprocess.STDOUT, universal_newlines=True
+            ).splitlines()
+        except subprocess.CalledProcessError as e:
+            _LOGGER.exception("_transcribe_wav_nnet3")
+            _LOGGER.error(e.output)
+            lines = []
+
+        text = ""
+        for line in lines:
+            if line.startswith("utt1 "):
+                text = line.split(maxsplit=1)[1]
+                break
+
+        return text
+
+    def _transcribe_wav_gmm(self, wav_path: str) -> str:
+        # GMM decoding steps:
+        # 1. compute-mfcc-feats
+        # 2. compute-cmvn-stats
+        # 3. apply-cmvn
+        # 4. add-deltas
+        # 5. gmm-latgen-faster
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mfcc_conf = self.model_dir / "conf" / "mfcc.conf"
+
+            # 1. compute-mfcc-feats
+            feats_cmd = [
+                str(_DIR / "kaldi" / "compute-mfcc-feats"),
+                f"--config={mfcc_conf}",
+                f"scp:echo utt1 {wav_path}|",
+                f"ark,scp:{temp_dir}/feats.ark,{temp_dir}/feats.scp",
+            ]
+            _LOGGER.debug(feats_cmd)
+            subprocess.check_call(feats_cmd)
+
+            # 2. compute-cmvn-stats
+            stats_cmd = [
+                str(_DIR / "kaldi" / "compute-cmvn-stats"),
+                f"scp:{temp_dir}/feats.scp",
+                f"ark,scp:{temp_dir}/cmvn.ark,{temp_dir}/cmvn.scp",
+            ]
+            _LOGGER.debug(stats_cmd)
+            subprocess.check_call(stats_cmd)
+
+            # 3. apply-cmvn
+            norm_cmd = [
+                str(_DIR / "kaldi" / "apply-cmvn"),
+                f"scp:{temp_dir}/cmvn.scp",
+                f"scp:{temp_dir}/feats.scp",
+                f"ark,scp:{temp_dir}/feats_cmvn.ark,{temp_dir}/feats_cmvn.scp",
+            ]
+            _LOGGER.debug(norm_cmd)
+            subprocess.check_call(norm_cmd)
+
+            # 4. add-deltas
+            delta_cmd = [
+                str(_DIR / "kaldi" / "add-deltas"),
+                f"scp:{temp_dir}/feats_cmvn.scp",
+                f"ark,scp:{temp_dir}/deltas.ark,{temp_dir}/deltas.scp",
+            ]
+            _LOGGER.debug(delta_cmd)
+            subprocess.check_call(delta_cmd)
+
+            # 5. decode
+            decode_cmd = [
+                str(_DIR / "kaldi" / "gmm-latgen-faster"),
+                f"--word-symbol-table={self.model_dir}/graph/words.txt",
+                f"{self.model_dir}/model/final.mdl",
+                f"{self.graph_dir}/HCLG.fst",
+                f"scp:{temp_dir}/deltas.scp",
+                f"ark,scp:{temp_dir}/lattices.ark,{temp_dir}/lattices.scp",
+            ]
+            _LOGGER.debug(decode_cmd)
+            subprocess.check_call(decode_cmd)
+
+            try:
+                lines = subprocess.check_output(
+                    decode_cmd, stderr=subprocess.STDOUT, universal_newlines=True
+                ).splitlines()
+            except subprocess.CalledProcessError as e:
+                _LOGGER.exception("_transcribe_wav_gmm")
+                _LOGGER.error(e.output)
+                lines = []
+
+            print(lines)
+            text = ""
+            for line in lines:
+                if line.startswith("utt1 "):
+                    text = line.split(maxsplit=1)[1]
+                    break
+
+            return text
+
+    # -------------------------------------------------------------------------
 
     def transcribe_stream(
         self,
@@ -193,7 +276,6 @@ class KaldiCommandLineTranscriber(Transcriber):
         )
 
         # Read until started
-        # TODO: Add timeout
         line = self.decode_proc.stdout.readline().lower().strip()
         if line:
             _LOGGER.debug(line)

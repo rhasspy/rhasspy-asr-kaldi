@@ -9,7 +9,7 @@ DOWNLOAD_DIR = download
 architecture := $(shell bash architecture.sh)
 platform = $(shell sh platform.sh)
 
-.PHONY: reformat check venv dist
+.PHONY: reformat check venv dist downloads rhasspy-libs
 
 # -----------------------------------------------------------------------------
 # Python
@@ -29,7 +29,7 @@ check:
 	yamllint .
 	pip list --outdated
 
-venv: $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz kaldiroot etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
+venv: downloads rhasspy-libs kaldiroot etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
 	scripts/create-venv.sh "$(architecture)"
 
 dist: kaldiroot
@@ -39,6 +39,17 @@ dist: kaldiroot
 # -----------------------------------------------------------------------------
 # Downloads
 # -----------------------------------------------------------------------------
+
+# Rhasspy development dependencies
+rhasspy-libs: $(DOWNLOAD_DIR)/rhasspy-asr-0.1.4.tar.gz $(DOWNLOAD_DIR)/rhasspy-nlu-0.1.6.tar.gz
+
+$(DOWNLOAD_DIR)/rhasspy-asr-0.1.4.tar.gz:
+	curl -sSfL -o $@ "https://github.com/rhasspy/rhasspy-asr/archive/master.tar.gz"
+
+$(DOWNLOAD_DIR)/rhasspy-nlu-0.1.6.tar.gz:
+	curl -sSfL -o $@ "https://github.com/rhasspy/rhasspy-nlu/archive/master.tar.gz"
+
+downloads: $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz
 
 # Download pre-built MITLM binaries.
 $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz:
