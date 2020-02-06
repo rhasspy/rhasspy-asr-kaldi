@@ -189,17 +189,19 @@ def train(
             if graph_dir.exists():
                 shutil.rmtree(graph_dir)
 
+            data_local_dir = model_dir / "data" / "local"
+
             _LOGGER.debug("Generating lexicon")
-            dict_dir = data_dir / "local" / "dict"
-            dict_dir.mkdir(parents=True, exist_ok=True)
+            dict_local_dir = data_local_dir / "dict"
+            dict_local_dir.mkdir(parents=True, exist_ok=True)
 
             # Copy phones
             phones_dir = model_dir / "phones"
             for phone_file in phones_dir.glob("*.txt"):
-                shutil.copy(phone_file, dict_dir / phone_file.name)
+                shutil.copy(phone_file, dict_local_dir / phone_file.name)
 
             # Copy dictionary
-            shutil.copy(dict_file.name, dict_dir / "lexicon.txt")
+            shutil.copy(dict_file.name, dict_local_dir / "lexicon.txt")
 
             # Create utils link
             egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
@@ -211,12 +213,13 @@ def train(
 
             # 1. prepare_lang.sh
             lang_dir = data_dir / "lang"
+            lang_local_dir = data_local_dir / "lang"
             prepare_lang = [
                 "bash",
                 str(egs_utils_dir / "prepare_lang.sh"),
-                str(dict_dir),
+                str(dict_local_dir),
                 "",
-                str(data_dir / "local" / "lang"),
+                str(lang_local_dir),
                 str(lang_dir),
             ]
 
@@ -224,7 +227,7 @@ def train(
             subprocess.check_call(prepare_lang, cwd=model_dir)
 
             # 2. format_lm.sh
-            lm_arpa = data_dir / "local" / "lang" / "lm.arpa"
+            lm_arpa = lang_local_dir / "lm.arpa"
             lm_arpa.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(lm_file.name, lm_arpa)
 
@@ -237,7 +240,7 @@ def train(
                 str(egs_utils_dir / "format_lm.sh"),
                 str(lang_dir),
                 str(lm_arpa.with_suffix(".arpa.gz")),
-                str(dict_dir / "lexicon.txt"),
+                str(dict_local_dir / "lexicon.txt"),
                 str(lang_dir),
             ]
 
@@ -258,6 +261,8 @@ def train(
             # 4. prepare_online_decoding.sh
             extractor_dir = model_dir / "extractor"
             if extractor_dir.is_dir():
+                # nnet3 only
+                mfcc_conf = model_dir / "conf" / "mfcc_hires.conf"
                 egs_steps_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "steps"
                 prepare_online_decoding = [
                     "bash",
@@ -267,6 +272,8 @@ def train(
                         / "nnet3"
                         / "prepare_online_decoding.sh"
                     ),
+                    "--mfcc-config",
+                    str(mfcc_conf),
                     str(lang_dir),
                     str(extractor_dir),
                     str(model_dir / "model"),

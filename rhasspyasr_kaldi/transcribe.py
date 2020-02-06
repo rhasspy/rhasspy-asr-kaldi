@@ -45,7 +45,6 @@ class KaldiCommandLineTranscriber(Transcriber):
     def transcribe_wav(self, wav_data: bytes) -> typing.Optional[Transcription]:
         """Speech to text from WAV data."""
         start_time = time.perf_counter()
-        words_txt = self.graph_dir / "words.txt"
 
         with tempfile.NamedTemporaryFile(suffix=".wav", mode="wb") as wav_file:
             wav_file.write(wav_data)
@@ -73,6 +72,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         return None
 
     def _transcribe_wav_nnet3(self, wav_path: str) -> str:
+        words_txt = self.graph_dir / "words.txt"
         online_conf = self.model_dir / "online" / "conf" / "online.conf"
         kaldi_cmd = [
             str(_DIR / "kaldi" / "online2-wav-nnet3-latgen-faster"),
@@ -113,6 +113,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         # 4. add-deltas
         # 5. gmm-latgen-faster
         with tempfile.TemporaryDirectory() as temp_dir:
+            words_txt = self.graph_dir / "words.txt"
             mfcc_conf = self.model_dir / "conf" / "mfcc.conf"
 
             # 1. compute-mfcc-feats
@@ -156,7 +157,7 @@ class KaldiCommandLineTranscriber(Transcriber):
             # 5. decode
             decode_cmd = [
                 str(_DIR / "kaldi" / "gmm-latgen-faster"),
-                f"--word-symbol-table={self.model_dir}/graph/words.txt",
+                f"--word-symbol-table={words_txt}",
                 f"{self.model_dir}/model/final.mdl",
                 f"{self.graph_dir}/HCLG.fst",
                 f"scp:{temp_dir}/deltas.scp",
