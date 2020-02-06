@@ -167,9 +167,11 @@ class KaldiCommandLineTranscriber(Transcriber):
             subprocess.check_call(decode_cmd)
 
             try:
-                lines = subprocess.check_output(
-                    decode_cmd, stderr=subprocess.STDOUT, universal_newlines=True
-                ).splitlines()
+                lines = (
+                    subprocess.check_output(decode_cmd, stderr=subprocess.STDOUT)
+                    .decode()
+                    .splitlines()
+                )
             except subprocess.CalledProcessError as e:
                 _LOGGER.exception("_transcribe_wav_gmm")
                 _LOGGER.error(e.output)
@@ -214,7 +216,7 @@ class KaldiCommandLineTranscriber(Transcriber):
             # This should force the Kaldi server to finalize the output.
             client_socket.shutdown(socket.SHUT_WR)
 
-            lines = client_file.read().splitlines()
+            lines = client_file.read().decode().splitlines()
             if lines:
                 text = lines[-1].strip()
             else:
@@ -249,6 +251,8 @@ class KaldiCommandLineTranscriber(Transcriber):
                         wav_file.writeframes(frame)
 
                 return self.transcribe_wav(wav_buffer.getvalue())
+
+        raise ValueError(f"Unsupported model type: {self.model_type}")
 
     def stop(self):
         """Stop the transcriber."""

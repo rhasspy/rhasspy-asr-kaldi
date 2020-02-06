@@ -45,6 +45,10 @@ def train(
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
 
+    # Convert to paths
+    model_dir = Path(model_dir)
+    graph_dir = Path(graph_dir)
+
     # Convert to directed graph
     graph = rhasspynlu.json_to_graph(graph_dict)
 

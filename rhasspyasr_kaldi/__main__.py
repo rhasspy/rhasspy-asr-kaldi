@@ -10,7 +10,8 @@ from pathlib import Path
 
 import attr
 
-from . import KaldiCommandLineTranscriber, train as kaldi_train
+from . import KaldiCommandLineTranscriber
+from . import train as kaldi_train
 
 _LOGGER = logging.getLogger(__name__)
 
