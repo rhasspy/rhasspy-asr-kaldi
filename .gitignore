@@ -8,6 +8,7 @@ kaldi_speech/*.so
 kaldiroot
 .vscode/
 download/
+debian/rhasspy-asr-kaldi*
 
 rhasspyasr_kaldi/kaldi/
 rhasspyasr_kaldi/estimate-ngram

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+if [[ -z "${rhasspyasr_kaldi_dir}" ]]; then
+    this_dir="$( cd "$( dirname "$0" )" && pwd )"
+    rhasspyasr_kaldi_dir="${this_dir}/../lib/rhasspyasr_kaldi"
+fi
+
+"${rhasspyasr_kaldi_dir}/rhasspyasr_kaldi" "$@"

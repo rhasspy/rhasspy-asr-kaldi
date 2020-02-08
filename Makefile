@@ -6,35 +6,43 @@ SHELL_FILES = bin/* *.sh
 PIP_INSTALL ?= install
 DOWNLOAD_DIR = download
 
+version := $(shell cat VERSION)
 architecture := $(shell bash architecture.sh)
 platform = $(shell sh platform.sh)
 
-.PHONY: reformat check venv dist downloads rhasspy-libs
+.PHONY: reformat check venv sdist dist downloads rhasspy-libs debian pyinstaller
 
 # -----------------------------------------------------------------------------
 # Python
 # -----------------------------------------------------------------------------
 
 reformat:
-	black .
-	isort $(PYTHON_FILES)
+	scripts/format-code.sh $(PYTHON_FILES)
 
 check:
-	flake8 $(PYTHON_FILES)
-	pylint $(PYTHON_FILES)
-	mypy $(PYTHON_FILES)
-	black --check .
-	isort --check-only $(PYTHON_FILES)
-	bashate $(SHELL_FILES)
-	yamllint .
-	pip list --outdated
+	scripts/check-code.sh $(PYTHON_FILES)
 
 venv: downloads rhasspy-libs kaldiroot etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
 	scripts/create-venv.sh "$(architecture)"
 
-dist: kaldiroot
+test:
+	echo "No tests yet"
+
+sdist: kaldiroot
 	rm -rf dist/
 	python3 setup.py bdist_wheel --plat-name $(platform)
+
+dist: sdist debian
+
+# -----------------------------------------------------------------------------
+# Debian
+# -----------------------------------------------------------------------------
+
+pyinstaller:
+	scripts/build-pyinstaller.sh "${architecture}" "${version}"
+
+debian:
+	scripts/build-debian.sh "${architecture}" "${version}"
 
 # -----------------------------------------------------------------------------
 # Downloads

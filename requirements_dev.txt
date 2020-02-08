@@ -2,5 +2,6 @@ bashate==0.6.0
 black==19.10b0
 flake8==3.7.9
 mypy==0.761
+pyinstaller==3.6
 pylint==2.4.4
 yamllint==1.20.0
