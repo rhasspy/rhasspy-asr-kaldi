@@ -111,6 +111,12 @@ def train(
             pronunciations: typing.Dict[str, typing.List[str]] = {}
 
             for base_dict_path in base_dictionaries:
+                if not os.path.exists(base_dict_path):
+                    _LOGGER.warning(
+                        "Base dictionary does not exist: %s", base_dict_path
+                    )
+                    continue
+
                 _LOGGER.debug("Loading base dictionary from %s", base_dict_path)
                 with open(base_dict_path, "r") as base_dict_file:
                     read_dict(base_dict_file, word_dict=pronunciations)
@@ -185,6 +191,22 @@ def train(
             # 4. prepare_online_decoding.sh
             # ---------------------------------------------------------
 
+            # Extend PATH
+            egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
+            extended_env = os.environ.copy()
+            extended_env["PATH"] = (
+                str(_DIR / "kaldi")
+                + ":"
+                + str(egs_utils_dir)
+                + ":"
+                + extended_env["PATH"]
+            )
+
+            # Create empty path.sh
+            path_sh = model_dir / "path.sh"
+            if not path_sh.is_file():
+                path_sh.write_text("")
+
             # Delete existing data/graph
             data_dir = model_dir / "data"
             if data_dir.exists():
@@ -208,7 +230,6 @@ def train(
             shutil.copy(dict_file.name, dict_local_dir / "lexicon.txt")
 
             # Create utils link
-            egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
             model_utils_link = model_dir / "utils"
             if model_utils_link.exists():
                 model_utils_link.unlink()
@@ -228,7 +249,7 @@ def train(
             ]
 
             _LOGGER.debug(prepare_lang)
-            subprocess.check_call(prepare_lang, cwd=model_dir)
+            subprocess.check_call(prepare_lang, cwd=model_dir, env=extended_env)
 
             # 2. format_lm.sh
             lm_arpa = lang_local_dir / "lm.arpa"
@@ -237,7 +258,7 @@ def train(
 
             gzip_lm = ["gzip", str(lm_arpa)]
             _LOGGER.debug(gzip_lm)
-            subprocess.check_call(gzip_lm, cwd=lm_arpa.parent)
+            subprocess.check_call(gzip_lm, cwd=lm_arpa.parent, env=extended_env)
 
             format_lm = [
                 "bash",
@@ -249,7 +270,7 @@ def train(
             ]
 
             _LOGGER.debug(format_lm)
-            subprocess.check_call(format_lm, cwd=model_dir)
+            subprocess.check_call(format_lm, cwd=model_dir, env=extended_env)
 
             # 3. mkgraph.sh
             mkgraph = [
@@ -260,7 +281,7 @@ def train(
                 str(graph_dir),
             ]
             _LOGGER.debug(mkgraph)
-            subprocess.check_call(mkgraph, cwd=model_dir)
+            subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
 
             # 4. prepare_online_decoding.sh
             extractor_dir = model_dir / "extractor"
@@ -285,15 +306,51 @@ def train(
                 ]
 
                 _LOGGER.debug(prepare_online_decoding)
-                prepare_online_decoding_env = os.environ.copy()
-                prepare_online_decoding_env["PATH"] = (
-                    str(egs_utils_dir) + ":" + prepare_online_decoding_env["PATH"]
-                )
                 subprocess.check_call(
-                    prepare_online_decoding,
-                    cwd=model_dir,
-                    env=prepare_online_decoding_env,
+                    prepare_online_decoding, cwd=model_dir, env=extended_env
                 )
+
+
+# -----------------------------------------------------------------------------
+
+
+def guess_pronunciations(
+    words: typing.Iterable[str],
+    g2p_model: Path,
+    g2p_word_transform: typing.Optional[typing.Callable[[str], str]] = None,
+    num_guesses: int = 1,
+) -> typing.Iterable[typing.Tuple[str, typing.List[str]]]:
+    """Guess phonetic pronunciations for words. Yields (word, phonemes) pairs."""
+    g2p_word_transform = g2p_word_transform or (lambda s: s)
+
+    with tempfile.NamedTemporaryFile(mode="w") as wordlist_file:
+        for word in words:
+            word = g2p_word_transform(word)
+            print(word, file=wordlist_file)
+
+        wordlist_file.seek(0)
+        g2p_command = [
+            str(_DIR / "phonetisaurus-apply"),
+            "--model",
+            str(g2p_model),
+            "--word_list",
+            wordlist_file.name,
+            "--nbest",
+            str(num_guesses),
+        ]
+
+        _LOGGER.debug(g2p_command)
+        g2p_lines = subprocess.check_output(
+            g2p_command, universal_newlines=True
+        ).splitlines()
+
+        # Output is a pronunciation dictionary.
+        # Append to existing dictionary file.
+        for line in g2p_lines:
+            line = line.strip()
+            if line:
+                word, *phonemes = line.split()
+                yield (word.strip(), phonemes)
 
 
 # -----------------------------------------------------------------------------

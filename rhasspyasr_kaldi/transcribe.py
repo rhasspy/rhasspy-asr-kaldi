@@ -177,7 +177,6 @@ class KaldiCommandLineTranscriber(Transcriber):
                 _LOGGER.error(e.output)
                 lines = []
 
-            print(lines)
             text = ""
             for line in lines:
                 if line.startswith("utt1 "):
@@ -216,7 +215,7 @@ class KaldiCommandLineTranscriber(Transcriber):
             # This should force the Kaldi server to finalize the output.
             client_socket.shutdown(socket.SHUT_WR)
 
-            lines = client_file.read().decode().splitlines()
+            lines = client_file.read().splitlines()
             if lines:
                 text = lines[-1].strip()
             else:
