@@ -269,6 +269,13 @@ class KaldiCommandLineTranscriber(Transcriber):
         kaldi_cmd = [
             str(_DIR / "kaldi" / "online2-tcp-nnet3-decode-faster"),
             f"--config={online_conf}",
+            "--frame-subsampling-factor=3",
+            "--min-active=200",
+            "--max-active=2500",
+            "--lattice-beam=8.0",
+            "--acoustic-scale=1.0",
+            "--beam=24.0",
+            "--chunk-length=0.25",
             str(self.model_dir / "model" / "final.mdl"),
             str(self.graph_dir / "HCLG.fst"),
             str(self.graph_dir / "words.txt"),
