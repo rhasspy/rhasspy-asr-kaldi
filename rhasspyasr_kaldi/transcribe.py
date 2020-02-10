@@ -42,12 +42,12 @@ class KaldiCommandLineTranscriber(Transcriber):
         self.graph_dir = Path(graph_dir)
         self.decode_proc = None
 
-    def transcribe_wav(self, wav_data: bytes) -> typing.Optional[Transcription]:
+    def transcribe_wav(self, wav_bytes: bytes) -> typing.Optional[Transcription]:
         """Speech to text from WAV data."""
         start_time = time.perf_counter()
 
         with tempfile.NamedTemporaryFile(suffix=".wav", mode="wb") as wav_file:
-            wav_file.write(wav_data)
+            wav_file.write(wav_bytes)
             wav_file.seek(0)
 
             if self.model_type == KaldiModelType.NNET3:
@@ -65,7 +65,7 @@ class KaldiCommandLineTranscriber(Transcriber):
                 text=text.strip(),
                 likelihood=1,
                 transcribe_seconds=(end_time - start_time),
-                wav_seconds=get_wav_duration(wav_data),
+                wav_seconds=get_wav_duration(wav_bytes),
             )
 
         # Failure
