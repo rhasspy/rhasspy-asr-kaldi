@@ -3,44 +3,12 @@ import os
 import site
 from pathlib import Path
 
-from PyInstaller.utils.hooks import copy_metadata
-
 block_cipher = None
-
-# Need to specially handle these snowflakes
-webrtcvad_path = None
-
-site_dirs = site.getsitepackages()
-
-# Add explicit site packages
-rhasspy_site_packages = os.environ.get("RHASSPY_SITE_PACKAGES")
-if rhasspy_site_packages:
-    site_dirs = [rhasspy_site_packages] + site_dirs
-
-# Add virtual environment site packages
-venv_path = os.environ.get("VIRTUAL_ENV")
-if venv_path:
-    venv_lib = Path(venv_path) / "lib"
-    for venv_python_dir in venv_lib.glob("python*"):
-        venv_site_dir = venv_python_dir / "site-packages"
-        if venv_site_dir.is_dir():
-            site_dirs.append(venv_site_dir)
-
-# Look for compiled artifacts
-for site_dir in site_dirs:
-    site_dir = Path(site_dir)
-    webrtcvad_paths = list(site_dir.glob("_webrtcvad.*.so"))
-    if webrtcvad_paths:
-        webrtcvad_path = webrtcvad_paths[0]
-        break
-
-assert webrtcvad_path, "Missing webrtcvad"
 
 a = Analysis(
     [Path.cwd() / "__main__.py"],
     pathex=["."],
     binaries=[
-        (webrtcvad_path, "."),
         ("rhasspyasr_kaldi/estimate-ngram", "."),
         ("rhasspyasr_kaldi/libfst.so.13."),
         ("rhasspyasr_kaldi/libfstfar.so.13", "."),
@@ -48,7 +16,7 @@ a = Analysis(
         ("rhasspyasr_kaldi/libmitlm.so.1", "."),
         ("rhasspyasr_kaldi/phonetisaurus-g2pfst", "."),
     ],
-    datas=copy_metadata("webrtcvad"),
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
