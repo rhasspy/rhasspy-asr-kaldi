@@ -2,7 +2,7 @@ Package: rhasspy-asr-kaldi
 Version: ${version}
 Section: utils
 Priority: optional
-Depends: libstdc++6
+Depends: libstdc++6 libgfortran4
 Architecture: ${architecture}
 Maintainer: Michael Hansen
 Description: Command-line interface to Rhasspy ASR with Kaldi
