@@ -209,8 +209,8 @@ class KaldiCommandLineTranscriber(Transcriber):
             num_frames = 0
             for chunk in audio_stream:
                 if chunk:
-                  client_socket.sendall(chunk)
-                  num_frames += len(chunk) // sample_width
+                    client_socket.sendall(chunk)
+                    num_frames += len(chunk) // sample_width
 
             # Partial shutdown of socket (write only).
             # This should force the Kaldi server to finalize the output.
@@ -220,7 +220,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             lines = client_file.read().splitlines()
             if lines:
-                text = lines[-1].strip()
+                text = lines[-1].strip().decode()
             else:
                 # No result
                 text = ""

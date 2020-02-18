@@ -10,7 +10,7 @@ a = Analysis(
     pathex=["."],
     binaries=[
         ("rhasspyasr_kaldi/estimate-ngram", "."),
-        ("rhasspyasr_kaldi/libfst.so.13."),
+        ("rhasspyasr_kaldi/libfst.so.13", "."),
         ("rhasspyasr_kaldi/libfstfar.so.13", "."),
         ("rhasspyasr_kaldi/libfstngram.so.13", "."),
         ("rhasspyasr_kaldi/libmitlm.so.1", "."),

@@ -1,3 +1,3 @@
 """Automated speech recognition in Rhasspy using Kaldi."""
-from .train import train, read_dict, guess_pronunciations
+from .train import guess_pronunciations, read_dict, train
 from .transcribe import KaldiCommandLineTranscriber
