@@ -203,7 +203,7 @@ class KaldiCommandLineTranscriber(Transcriber):
             # Connect to decoder
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client_socket.connect(("localhost", 5050))
-            client_file = client_socket.makefile()
+            client_file = client_socket.makefile(mode="rb")
 
             start_time = time.perf_counter()
             num_frames = 0
@@ -218,9 +218,9 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             _LOGGER.debug("Finished stream. Getting transcription.")
 
-            lines = client_file.read().splitlines()
+            lines = client_file.read().decode().splitlines()
             if lines:
-                text = lines[-1].strip().decode()
+                text = lines[-1].strip()
             else:
                 # No result
                 text = ""
