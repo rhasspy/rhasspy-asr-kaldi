@@ -95,6 +95,11 @@ def get_args() -> argparse.Namespace:
         "--intent-graph", help="Path to intent graph JSON file (default: stdin)"
     )
     train_parser.add_argument(
+        "--no-intent-graph",
+        action="store_true",
+        help="Use language model and dictionaries to generate HCLG.fst",
+    )
+    train_parser.add_argument(
         "--dictionary", help="Path to write custom pronunciation dictionary"
     )
     train_parser.add_argument(
@@ -107,10 +112,7 @@ def get_args() -> argparse.Namespace:
         "--language-model", help="Path to write custom language model"
     )
     train_parser.add_argument(
-        "--base-dictionary",
-        action="append",
-        required=True,
-        help="Paths to pronunciation dictionaries",
+        "--base-dictionary", action="append", help="Paths to pronunciation dictionaries"
     )
     train_parser.add_argument(
         "--g2p-model", help="Path to Phonetisaurus grapheme-to-phoneme FST model"
@@ -211,8 +213,12 @@ def train(args: argparse.Namespace):
     if args.g2p_model:
         args.g2p_model = Path(args.g2p_model)
 
-    args.base_dictionary = [Path(p) for p in args.base_dictionary]
+    if args.base_dictionary:
+        args.base_dictionary = [Path(p) for p in args.base_dictionary]
+    else:
+        args.base_dictionary = []
 
+    graph_dict: typing.Optional[typing.Dict[str, typing.Any]] = None
     if args.intent_graph:
         # Load graph from file
         args.intent_graph = Path(args.intent_graph)
@@ -220,7 +226,7 @@ def train(args: argparse.Namespace):
         _LOGGER.debug("Loading intent graph from %s", args.intent_graph)
         with open(args.intent_graph, "r") as graph_file:
             graph_dict = json.load(graph_file)
-    else:
+    elif not args.no_intent_graph:
         # Load graph from stdin
         if os.isatty(sys.stdin.fileno()):
             print("Reading intent graph from stdin...", file=sys.stderr)
