@@ -96,6 +96,9 @@ def train(
                     if language_model:
                         shutil.copy(lm_file.name, language_model)
                         _LOGGER.debug("Wrote language model to %s", str(language_model))
+                    else:
+                        language_model = lm_file.name
+                        lm_file.seek(0)
 
                     # Extract vocabulary
                     vocab_file.seek(0)
@@ -185,123 +188,138 @@ def train(
                 if dictionary:
                     shutil.copy(dict_file.name, dictionary)
                     _LOGGER.debug("Wrote dictionary to %s", str(dictionary))
+                else:
+                    dictionary = dict_file.name
+                    dict_file.seek(0)
 
-    # -------------------------------------------------------------------------
-    # Kaldi Training
-    # ---------------------------------------------------------
-    # 1. prepare_lang.sh
-    # 2. format_lm.sh
-    # 3. mkgraph.sh
-    # 4. prepare_online_decoding.sh
-    # ---------------------------------------------------------
+                # -------------------------------------------------------------------------
+                # Kaldi Training
+                # ---------------------------------------------------------
+                # 1. prepare_lang.sh
+                # 2. format_lm.sh
+                # 3. mkgraph.sh
+                # 4. prepare_online_decoding.sh
+                # ---------------------------------------------------------
 
-    # Extend PATH
-    egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
-    extended_env = os.environ.copy()
-    extended_env["PATH"] = (
-        str(_DIR / "kaldi") + ":" + str(egs_utils_dir) + ":" + extended_env["PATH"]
-    )
+                # Extend PATH
+                egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
+                extended_env = os.environ.copy()
+                extended_env["PATH"] = (
+                    str(_DIR / "kaldi")
+                    + ":"
+                    + str(egs_utils_dir)
+                    + ":"
+                    + extended_env["PATH"]
+                )
 
-    # Create empty path.sh
-    path_sh = model_dir / "path.sh"
-    if not path_sh.is_file():
-        path_sh.write_text("")
+                # Create empty path.sh
+                path_sh = model_dir / "path.sh"
+                if not path_sh.is_file():
+                    path_sh.write_text("")
 
-    # Delete existing data/graph
-    data_dir = model_dir / "data"
-    if data_dir.exists():
-        shutil.rmtree(data_dir)
+                # Delete existing data/graph
+                data_dir = model_dir / "data"
+                if data_dir.exists():
+                    shutil.rmtree(data_dir)
 
-    if graph_dir.exists():
-        shutil.rmtree(graph_dir)
+                if graph_dir.exists():
+                    shutil.rmtree(graph_dir)
 
-    data_local_dir = model_dir / "data" / "local"
+                data_local_dir = model_dir / "data" / "local"
 
-    _LOGGER.debug("Generating lexicon")
-    dict_local_dir = data_local_dir / "dict"
-    dict_local_dir.mkdir(parents=True, exist_ok=True)
+                _LOGGER.debug("Generating lexicon")
+                dict_local_dir = data_local_dir / "dict"
+                dict_local_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy phones
-    phones_dir = model_dir / "phones"
-    for phone_file in phones_dir.glob("*.txt"):
-        shutil.copy(phone_file, dict_local_dir / phone_file.name)
+                # Copy phones
+                phones_dir = model_dir / "phones"
+                for phone_file in phones_dir.glob("*.txt"):
+                    shutil.copy(phone_file, dict_local_dir / phone_file.name)
 
-    # Copy dictionary
-    shutil.copy(dictionary, dict_local_dir / "lexicon.txt")
+                # Copy dictionary
+                _LOGGER.error("Dictionary %s", dictionary)
+                shutil.copy(dictionary, dict_local_dir / "lexicon.txt")
 
-    # Create utils link
-    model_utils_link = model_dir / "utils"
-    if model_utils_link.exists():
-        model_utils_link.unlink()
+                # Create utils link
+                model_utils_link = model_dir / "utils"
+                if model_utils_link.exists():
+                    model_utils_link.unlink()
 
-    model_utils_link.symlink_to(egs_utils_dir, target_is_directory=True)
+                model_utils_link.symlink_to(egs_utils_dir, target_is_directory=True)
 
-    # 1. prepare_lang.sh
-    lang_dir = data_dir / "lang"
-    lang_local_dir = data_local_dir / "lang"
-    prepare_lang = [
-        "bash",
-        str(egs_utils_dir / "prepare_lang.sh"),
-        str(dict_local_dir),
-        "",
-        str(lang_local_dir),
-        str(lang_dir),
-    ]
+                # 1. prepare_lang.sh
+                lang_dir = data_dir / "lang"
+                lang_local_dir = data_local_dir / "lang"
+                prepare_lang = [
+                    "bash",
+                    str(egs_utils_dir / "prepare_lang.sh"),
+                    str(dict_local_dir),
+                    "",
+                    str(lang_local_dir),
+                    str(lang_dir),
+                ]
 
-    _LOGGER.debug(prepare_lang)
-    subprocess.check_call(prepare_lang, cwd=model_dir, env=extended_env)
+                _LOGGER.debug(prepare_lang)
+                subprocess.check_call(prepare_lang, cwd=model_dir, env=extended_env)
 
-    # 2. format_lm.sh
-    lm_arpa = lang_local_dir / "lm.arpa"
-    lm_arpa.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(language_model, lm_arpa)
+                # 2. format_lm.sh
+                lm_arpa = lang_local_dir / "lm.arpa"
+                lm_arpa.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(language_model, lm_arpa)
 
-    gzip_lm = ["gzip", str(lm_arpa)]
-    _LOGGER.debug(gzip_lm)
-    subprocess.check_call(gzip_lm, cwd=lm_arpa.parent, env=extended_env)
+                gzip_lm = ["gzip", str(lm_arpa)]
+                _LOGGER.debug(gzip_lm)
+                subprocess.check_call(gzip_lm, cwd=lm_arpa.parent, env=extended_env)
 
-    format_lm = [
-        "bash",
-        str(egs_utils_dir / "format_lm.sh"),
-        str(lang_dir),
-        str(lm_arpa.with_suffix(".arpa.gz")),
-        str(dict_local_dir / "lexicon.txt"),
-        str(lang_dir),
-    ]
+                format_lm = [
+                    "bash",
+                    str(egs_utils_dir / "format_lm.sh"),
+                    str(lang_dir),
+                    str(lm_arpa.with_suffix(".arpa.gz")),
+                    str(dict_local_dir / "lexicon.txt"),
+                    str(lang_dir),
+                ]
 
-    _LOGGER.debug(format_lm)
-    subprocess.check_call(format_lm, cwd=model_dir, env=extended_env)
+                _LOGGER.debug(format_lm)
+                subprocess.check_call(format_lm, cwd=model_dir, env=extended_env)
 
-    # 3. mkgraph.sh
-    mkgraph = [
-        "bash",
-        str(egs_utils_dir / "mkgraph.sh"),
-        str(lang_dir),
-        str(model_dir / "model"),
-        str(graph_dir),
-    ]
-    _LOGGER.debug(mkgraph)
-    subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
+                # 3. mkgraph.sh
+                mkgraph = [
+                    "bash",
+                    str(egs_utils_dir / "mkgraph.sh"),
+                    str(lang_dir),
+                    str(model_dir / "model"),
+                    str(graph_dir),
+                ]
+                _LOGGER.debug(mkgraph)
+                subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
 
-    # 4. prepare_online_decoding.sh
-    extractor_dir = model_dir / "extractor"
-    if extractor_dir.is_dir():
-        # nnet3 only
-        mfcc_conf = model_dir / "conf" / "mfcc_hires.conf"
-        egs_steps_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "steps"
-        prepare_online_decoding = [
-            "bash",
-            str(egs_steps_dir / "online" / "nnet3" / "prepare_online_decoding.sh"),
-            "--mfcc-config",
-            str(mfcc_conf),
-            str(lang_dir),
-            str(extractor_dir),
-            str(model_dir / "model"),
-            str(model_dir / "online"),
-        ]
+                # 4. prepare_online_decoding.sh
+                extractor_dir = model_dir / "extractor"
+                if extractor_dir.is_dir():
+                    # nnet3 only
+                    mfcc_conf = model_dir / "conf" / "mfcc_hires.conf"
+                    egs_steps_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "steps"
+                    prepare_online_decoding = [
+                        "bash",
+                        str(
+                            egs_steps_dir
+                            / "online"
+                            / "nnet3"
+                            / "prepare_online_decoding.sh"
+                        ),
+                        "--mfcc-config",
+                        str(mfcc_conf),
+                        str(lang_dir),
+                        str(extractor_dir),
+                        str(model_dir / "model"),
+                        str(model_dir / "online"),
+                    ]
 
-        _LOGGER.debug(prepare_online_decoding)
-        subprocess.check_call(prepare_online_decoding, cwd=model_dir, env=extended_env)
+                    _LOGGER.debug(prepare_online_decoding)
+                    subprocess.check_call(
+                        prepare_online_decoding, cwd=model_dir, env=extended_env
+                    )
 
 
 # -----------------------------------------------------------------------------
@@ -344,9 +362,6 @@ def guess_pronunciations(
             if line:
                 word, *phonemes = line.split()
                 yield (word.strip(), phonemes)
-
-
-# -----------------------------------------------------------------------------
 
 
 def read_dict(
