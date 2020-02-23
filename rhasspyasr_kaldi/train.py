@@ -77,8 +77,11 @@ def train(
 
                 count_file.seek(0)
                 with tempfile.NamedTemporaryFile(mode="w+") as vocab_file:
+                    estimate_ngram = shutil.which("estimate-ngram") or (
+                        _DIR / "estimate-ngram"
+                    )
                     ngram_command = [
-                        str(_DIR / "estimate-ngram"),
+                        str(estimate_ngram),
                         "-order",
                         "3",
                         "-counts",
@@ -242,9 +245,7 @@ def train(
 
                 # Create utils link
                 model_utils_link = model_dir / "utils"
-                if model_utils_link.exists():
-                    model_utils_link.unlink()
-
+                model_utils_link.unlink(missing_ok=True)
                 model_utils_link.symlink_to(egs_utils_dir, target_is_directory=True)
 
                 # 1. prepare_lang.sh
