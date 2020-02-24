@@ -245,7 +245,13 @@ def train(
 
                 # Create utils link
                 model_utils_link = model_dir / "utils"
-                model_utils_link.unlink(missing_ok=True)
+
+                try:
+                    # Can't use missing_ok in 3.6
+                    model_utils_link.unlink()
+                except Exception:
+                    pass
+
                 model_utils_link.symlink_to(egs_utils_dir, target_is_directory=True)
 
                 # 1. prepare_lang.sh
