@@ -26,7 +26,7 @@ venv: downloads rhasspy-libs kaldiroot etc/kaldi_flat_files.txt etc/kaldi_dir_fi
 	scripts/create-venv.sh "$(architecture)"
 
 test:
-	echo "No tests yet"
+	scripts/run-tests.sh
 
 sdist: kaldiroot
 	rm -rf dist/
