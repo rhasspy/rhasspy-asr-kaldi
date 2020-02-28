@@ -22,17 +22,17 @@ reformat:
 check:
 	scripts/check-code.sh $(PYTHON_FILES)
 
-venv: downloads rhasspy-libs kaldiroot etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
+venv: downloads rhasspy-libs etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
 	scripts/create-venv.sh "$(architecture)"
 
 test:
 	scripts/run-tests.sh
 
-sdist: kaldiroot
+sdist:
 	rm -rf dist/
 	python3 setup.py bdist_wheel --plat-name $(platform)
 
-dist: sdist debian
+dist: sdist
 
 # -----------------------------------------------------------------------------
 # Debian
@@ -49,17 +49,13 @@ debian:
 # -----------------------------------------------------------------------------
 
 # Rhasspy development dependencies
-rhasspy-libs: $(DOWNLOAD_DIR)/rhasspy-asr-0.1.4.tar.gz $(DOWNLOAD_DIR)/rhasspy-nlu-0.1.6.tar.gz
+RHASSPY_DEPS := $(shell grep '^rhasspy-' requirements.txt | sort | comm -3 - rhasspy_wheels.txt | sed -e 's|^|$(DOWNLOAD_DIR)/|' -e 's/==/-/' -e 's/$$/.tar.gz/')
 
-$(DOWNLOAD_DIR)/rhasspy-asr-0.1.4.tar.gz:
+$(DOWNLOAD_DIR)/%.tar.gz:
 	mkdir -p "$(DOWNLOAD_DIR)"
-	curl -sSfL -o $@ "https://github.com/rhasspy/rhasspy-asr/archive/master.tar.gz"
+	scripts/download-dep.sh "$@"
 
-$(DOWNLOAD_DIR)/rhasspy-nlu-0.1.6.tar.gz:
-	mkdir -p "$(DOWNLOAD_DIR)"
-	curl -sSfL -o $@ "https://github.com/rhasspy/rhasspy-nlu/archive/master.tar.gz"
-
-downloads: $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz
+downloads: $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz $(RHASSPY_DEPS)
 
 # Download pre-built MITLM binaries.
 $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz:
