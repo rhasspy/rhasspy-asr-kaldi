@@ -10,7 +10,7 @@ from pathlib import Path
 
 import attr
 
-from . import KaldiCommandLineTranscriber
+from . import KaldiCommandLineTranscriber, PronunciationsType, read_dict
 from . import train as kaldi_train
 
 _LOGGER = logging.getLogger(__name__)
@@ -233,9 +233,16 @@ def train(args: argparse.Namespace):
 
         graph_dict = json.load(sys.stdin)
 
+    # Load base dictionaries
+    pronunciations: PronunciationsType = {}
+    for dict_path in args.base_dictionary:
+        if os.path.exists(dict_path):
+            _LOGGER.debug("Loading dictionary %s", str(dict_path))
+            read_dict(dict_path, pronunciations)
+
     kaldi_train(
         graph_dict,
-        args.base_dictionary,
+        pronunciations,
         args.model_dir,
         args.graph_dir,
         dictionary_word_transform=get_word_transform(args.dictionary_casing),

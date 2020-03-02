@@ -10,10 +10,13 @@ from pathlib import Path
 
 import rhasspynlu
 
-# -----------------------------------------------------------------------------
+PronunciationsType = typing.Dict[str, typing.List[typing.List[str]]]
 
 _DIR = Path(__file__).parent
 _LOGGER = logging.getLogger(__name__)
+
+
+# -----------------------------------------------------------------------------
 
 
 class MissingWordPronunciationsException(Exception):
@@ -32,7 +35,7 @@ class MissingWordPronunciationsException(Exception):
 
 def train(
     graph_dict: typing.Optional[typing.Dict[str, typing.Any]],
-    base_dictionaries: typing.Sequence[typing.Union[str, Path]],
+    pronunciations: PronunciationsType,
     model_dir: typing.Union[str, Path],
     graph_dir: typing.Union[str, Path],
     dictionary: typing.Optional[typing.Union[str, Path]] = None,
@@ -114,20 +117,6 @@ def train(
 
             # Write dictionary
             with tempfile.NamedTemporaryFile(mode="w") as dict_file:
-
-                # Load base dictionaries
-                pronunciations: typing.Dict[str, typing.List[typing.List[str]]] = {}
-
-                for base_dict_path in base_dictionaries:
-                    if not os.path.exists(base_dict_path):
-                        _LOGGER.warning(
-                            "Base dictionary does not exist: %s", base_dict_path
-                        )
-                        continue
-
-                    _LOGGER.debug("Loading base dictionary from %s", base_dict_path)
-                    with open(base_dict_path, "r") as base_dict_file:
-                        read_dict(base_dict_file, word_dict=pronunciations)
 
                 # Look up words
                 missing_words: typing.Set[str] = set()
@@ -373,8 +362,8 @@ def guess_pronunciations(
 
 def read_dict(
     dict_file: typing.Iterable[str],
-    word_dict: typing.Optional[typing.Dict[str, typing.List[typing.List[str]]]] = None,
-) -> typing.Dict[str, typing.List[typing.List[str]]]:
+    word_dict: typing.Optional[PronunciationsType] = None,
+) -> PronunciationsType:
     """Loads a CMU pronunciation dictionary."""
     if word_dict is None:
         word_dict = {}
