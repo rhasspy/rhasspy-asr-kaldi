@@ -336,8 +336,11 @@ def guess_pronunciations(
             print(word, file=wordlist_file)
 
         wordlist_file.seek(0)
+        phonetisaurus_apply = shutil.which("phonetisaurus-apply") or (
+            _DIR / "phonetisaurus-apply"
+        )
         g2p_command = [
-            str(_DIR / "phonetisaurus-apply"),
+            str(phonetisaurus_apply),
             "--model",
             str(g2p_model),
             "--word_list",
