@@ -36,11 +36,13 @@ class KaldiCommandLineTranscriber(Transcriber):
         model_type: KaldiModelType,
         model_dir: typing.Union[str, Path],
         graph_dir: typing.Union[str, Path],
+        port_num: typing.Optional[int] = None,
     ):
         self.model_type = model_type
         self.model_dir = Path(model_dir)
         self.graph_dir = Path(graph_dir)
         self.decode_proc = None
+        self.port_num = 5050 if port_num is None else port_num
 
     def transcribe_wav(self, wav_bytes: bytes) -> typing.Optional[Transcription]:
         """Speech to text from WAV data."""
@@ -202,7 +204,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # Connect to decoder
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect(("localhost", 5050))
+            client_socket.connect(("localhost", self.port_num))
             client_file = client_socket.makefile(mode="rb")
 
             start_time = time.perf_counter()
@@ -268,6 +270,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         online_conf = self.model_dir / "online" / "conf" / "online.conf"
         kaldi_cmd = [
             str(_DIR / "kaldi" / "online2-tcp-nnet3-decode-faster"),
+            f"--port-num={self.port_num}",
             f"--config={online_conf}",
             "--frame-subsampling-factor=3",
             "--min-active=200",
