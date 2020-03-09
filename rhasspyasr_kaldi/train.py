@@ -71,7 +71,9 @@ def train(
             if language_model:
                 count_file = open(str(language_model) + ".counts", "w")
             else:
-                count_file = tempfile.NamedTemporaryFile(mode="w")
+                count_file = typing.cast(
+                    typing.TextIO, tempfile.NamedTemporaryFile(mode="w")
+                )
 
             with count_file:
                 for intent_name in intent_counts:
