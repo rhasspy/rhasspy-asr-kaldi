@@ -45,6 +45,7 @@ def train(
     g2p_word_transform: typing.Optional[typing.Callable[[str], str]] = None,
     missing_words_path: typing.Optional[Path] = None,
     balance_counts: bool = True,
+    kaldi_dir: typing.Optional[Path] = None,
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -200,11 +201,22 @@ def train(
                 # 4. prepare_online_decoding.sh
                 # ---------------------------------------------------------
 
+                # Determine directory with Kaldi binaries
+                if kaldi_dir is None:
+                    # Check environment variable
+                    if "KALDI_DIR" in os.environ:
+                        kaldi_dir = Path(os.environ["KALDI_DIR"])
+                    else:
+                        kaldi_dir = _DIR / "kaldi"
+
+                assert kaldi_dir is not None
+                _LOGGER.debug("Using kaldi at %s", str(kaldi_dir))
+
                 # Extend PATH
-                egs_utils_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "utils"
+                egs_utils_dir = kaldi_dir / "egs" / "wsj" / "s5" / "utils"
                 extended_env = os.environ.copy()
                 extended_env["PATH"] = (
-                    str(_DIR / "kaldi")
+                    str(kaldi_dir)
                     + ":"
                     + str(egs_utils_dir)
                     + ":"
@@ -236,7 +248,6 @@ def train(
                     shutil.copy(phone_file, dict_local_dir / phone_file.name)
 
                 # Copy dictionary
-                _LOGGER.error("Dictionary %s", dictionary)
                 shutil.copy(dictionary, dict_local_dir / "lexicon.txt")
 
                 # Create utils link
@@ -302,7 +313,7 @@ def train(
                 if extractor_dir.is_dir():
                     # nnet3 only
                     mfcc_conf = model_dir / "conf" / "mfcc_hires.conf"
-                    egs_steps_dir = _DIR / "kaldi" / "egs" / "wsj" / "s5" / "steps"
+                    egs_steps_dir = kaldi_dir / "egs" / "wsj" / "s5" / "steps"
                     prepare_online_decoding = [
                         "bash",
                         str(

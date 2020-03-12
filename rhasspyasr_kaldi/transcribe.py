@@ -1,6 +1,7 @@
 """Automated speech recognition in Rhasspy using Kaldi."""
 import io
 import logging
+import os
 import socket
 import subprocess
 import tempfile
@@ -37,12 +38,26 @@ class KaldiCommandLineTranscriber(Transcriber):
         model_dir: typing.Union[str, Path],
         graph_dir: typing.Union[str, Path],
         port_num: typing.Optional[int] = None,
+        kaldi_dir: typing.Optional[Path] = None,
     ):
         self.model_type = model_type
         self.model_dir = Path(model_dir)
         self.graph_dir = Path(graph_dir)
         self.decode_proc = None
         self.port_num = 5050 if port_num is None else port_num
+
+        if kaldi_dir is None:
+            if "KALDI_DIR" in os.environ:
+                # Use directory from environment
+                self.kaldi_dir = Path(os.environ["KALDI_DIR"])
+            else:
+                # Use bundled Kaldi
+                self.kaldi_dir = _DIR / "kaldi"
+        else:
+            # Use directory from __init__
+            self.kaldi_dir = kaldi_dir
+
+        _LOGGER.debug("Using kaldi at %s", str(self.kaldi_dir))
 
     def transcribe_wav(self, wav_bytes: bytes) -> typing.Optional[Transcription]:
         """Speech to text from WAV data."""
@@ -77,7 +92,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         words_txt = self.graph_dir / "words.txt"
         online_conf = self.model_dir / "online" / "conf" / "online.conf"
         kaldi_cmd = [
-            str(_DIR / "kaldi" / "online2-wav-nnet3-latgen-faster"),
+            str(self.kaldi_dir / "online2-wav-nnet3-latgen-faster"),
             "--online=false",
             "--do-endpointing=false",
             f"--word-symbol-table={words_txt}",
@@ -120,7 +135,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # 1. compute-mfcc-feats
             feats_cmd = [
-                str(_DIR / "kaldi" / "compute-mfcc-feats"),
+                str(self.kaldi_dir / "compute-mfcc-feats"),
                 f"--config={mfcc_conf}",
                 f"scp:echo utt1 {wav_path}|",
                 f"ark,scp:{temp_dir}/feats.ark,{temp_dir}/feats.scp",
@@ -130,7 +145,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # 2. compute-cmvn-stats
             stats_cmd = [
-                str(_DIR / "kaldi" / "compute-cmvn-stats"),
+                str(self.kaldi_dir / "compute-cmvn-stats"),
                 f"scp:{temp_dir}/feats.scp",
                 f"ark,scp:{temp_dir}/cmvn.ark,{temp_dir}/cmvn.scp",
             ]
@@ -139,7 +154,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # 3. apply-cmvn
             norm_cmd = [
-                str(_DIR / "kaldi" / "apply-cmvn"),
+                str(self.kaldi_dir / "apply-cmvn"),
                 f"scp:{temp_dir}/cmvn.scp",
                 f"scp:{temp_dir}/feats.scp",
                 f"ark,scp:{temp_dir}/feats_cmvn.ark,{temp_dir}/feats_cmvn.scp",
@@ -149,7 +164,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # 4. add-deltas
             delta_cmd = [
-                str(_DIR / "kaldi" / "add-deltas"),
+                str(self.kaldi_dir / "add-deltas"),
                 f"scp:{temp_dir}/feats_cmvn.scp",
                 f"ark,scp:{temp_dir}/deltas.ark,{temp_dir}/deltas.scp",
             ]
@@ -158,7 +173,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # 5. decode
             decode_cmd = [
-                str(_DIR / "kaldi" / "gmm-latgen-faster"),
+                str(self.kaldi_dir / "gmm-latgen-faster"),
                 f"--word-symbol-table={words_txt}",
                 f"{self.model_dir}/model/final.mdl",
                 f"{self.graph_dir}/HCLG.fst",
@@ -269,7 +284,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         """Starts online2-tcp-nnet3-decode-faster process."""
         online_conf = self.model_dir / "online" / "conf" / "online.conf"
         kaldi_cmd = [
-            str(_DIR / "kaldi" / "online2-tcp-nnet3-decode-faster"),
+            str(self.kaldi_dir / "online2-tcp-nnet3-decode-faster"),
             f"--port-num={self.port_num}",
             f"--config={online_conf}",
             "--frame-subsampling-factor=3",
