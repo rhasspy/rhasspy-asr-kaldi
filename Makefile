@@ -55,12 +55,7 @@ $(DOWNLOAD_DIR)/%.tar.gz:
 	mkdir -p "$(DOWNLOAD_DIR)"
 	scripts/download-dep.sh "$@"
 
-downloads: $(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz $(RHASSPY_DEPS)
-
-# Download pre-built MITLM binaries.
-$(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz:
-	mkdir -p "$(DOWNLOAD_DIR)"
-	curl -sSfL -o $@ "https://github.com/synesthesiam/docker-mitlm/releases/download/v0.4.2/mitlm-0.4.2-$(architecture).tar.gz"
+downloads: $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz $(RHASSPY_DEPS)
 
 # Download pre-built Phonetisaurus binaries.
 $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz:

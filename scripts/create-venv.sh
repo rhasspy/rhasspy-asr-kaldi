@@ -44,11 +44,11 @@ pip3 ${PIP_INSTALL} -r requirements.txt
 pip3 ${PIP_INSTALL} -r requirements_dev.txt || \
     echo "Failed to install development requirements"
 
-# Install MITLM
-echo 'Installing MITLM'
-"${src_dir}/scripts/install-mitlm.sh" \
-    "${download}/mitlm-0.4.2-${architecture}.tar.gz" \
-    "${src_dir}/${python_name}"
+# Check for opengrm
+if [[ -n "$(command -v ngramcount)" ]]; then
+    echo 'Missing libngram-tools'
+    echo 'Run: apt-get install libngram-tools'
+fi
 
 # Install Phonetisaurus
 echo 'Installing Phonetisaurus'

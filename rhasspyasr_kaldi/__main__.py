@@ -9,8 +9,10 @@ import wave
 from pathlib import Path
 
 import attr
+import rhasspynlu
+from rhasspynlu.g2p import PronunciationsType
 
-from . import KaldiCommandLineTranscriber, PronunciationsType, read_dict
+from . import KaldiCommandLineTranscriber
 from . import train as kaldi_train
 
 _LOGGER = logging.getLogger(__name__)
@@ -238,7 +240,7 @@ def train(args: argparse.Namespace):
     for dict_path in args.base_dictionary:
         if os.path.exists(dict_path):
             _LOGGER.debug("Loading dictionary %s", str(dict_path))
-            read_dict(dict_path, pronunciations)
+            rhasspynlu.g2p.read_pronunciations(dict_path, pronunciations)
 
     kaldi_train(
         graph_dict,
