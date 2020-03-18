@@ -50,6 +50,12 @@ if [[ -n "$(command -v ngramcount)" ]]; then
     echo 'Run: apt-get install libngram-tools'
 fi
 
+# Install MITLM
+echo 'Installing MITLM'
+"${src_dir}/scripts/install-mitlm.sh" \
+    "${download}/mitlm-0.4.2-${architecture}.tar.gz" \
+    "${src_dir}/${python_name}"
+
 # Install Phonetisaurus
 echo 'Installing Phonetisaurus'
 "${src_dir}/scripts/install-phonetisaurus.sh" \
