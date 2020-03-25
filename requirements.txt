@@ -1,4 +1,3 @@
-attrs==19.3.0
 networkx==2.4
 rhasspy-asr==0.1.5
 rhasspy-nlu==0.1.7

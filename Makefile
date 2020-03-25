@@ -12,6 +12,8 @@ platform = $(shell sh platform.sh)
 
 .PHONY: reformat check venv sdist dist downloads rhasspy-libs debian pyinstaller
 
+all: venv
+
 # -----------------------------------------------------------------------------
 # Python
 # -----------------------------------------------------------------------------
@@ -28,11 +30,8 @@ venv: downloads rhasspy-libs etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
 test:
 	scripts/run-tests.sh
 
-sdist:
-	rm -rf dist/
-	python3 setup.py bdist_wheel --plat-name $(platform)
-
-dist: sdist
+dist:
+	scripts/build-wheel.sh $(platform)
 
 # -----------------------------------------------------------------------------
 # Debian

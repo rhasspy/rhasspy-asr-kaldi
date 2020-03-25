@@ -1,5 +1,6 @@
 """Command-line interface to rhasspy-asr-kaldi"""
 import argparse
+import dataclasses
 import json
 import logging
 import os
@@ -8,7 +9,6 @@ import typing
 import wave
 from pathlib import Path
 
-import attr
 import rhasspynlu
 from rhasspynlu.g2p import PronunciationsType
 
@@ -270,8 +270,8 @@ def get_word_transform(name: str) -> typing.Callable[[str], str]:
 
 
 def print_json(result):
-    """Print attr class as JSON"""
-    json.dump(attr.asdict(result), sys.stdout)
+    """Print data class as JSON"""
+    json.dump(dataclasses.asdict(result), sys.stdout)
     print("")
     sys.stdout.flush()
 

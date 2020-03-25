@@ -5,6 +5,19 @@
 
 Automated speech recognition in [Rhasspy](https://github.com/synesthesiam/rhasspy) voice assistant with [Kaldi](http://kaldi-asr.org).
 
+## Dependencies
+
+`rhasspy-asr-pocketsphinx` requires:
+
+* Python 3.7
+* [Kaldi](https://kaldi-asr.org)
+* [Opengrm](http://www.opengrm.org/twiki/bin/view/GRM/NGramLibrary)
+* [Phonetisaurus](https://github.com/AdolfVonKleist/Phonetisaurus)
+
+You can usually install Opengrm with `apt-get install libngram-tools`
+
+Kaldi and Phonetisaurus are included in the pre-built wheel.
+
 ## Transcribing
 
 Use `python3 -m rhasspyasr_kaldi transcribe <ARGS>`
@@ -111,8 +124,6 @@ When using the `train` command, you will need to specify the following arguments
 
 * [Kaldi](http://kaldi-asr.org)
     * Speech to text engine
-* [MITLM](https://github.com/mitlm/mitlm)
-    * Language model from ngrams
 * [Phonetisaurus](https://github.com/AdolfVonKleist/Phonetisaurus)
     * Guesses pronunciations for unknown words
 
@@ -160,39 +171,6 @@ Use `make depend -j 4` and `make -j 4` if you have multiple CPU cores. This will
 There is no installation step. The `kaldi-master` directory contains all the libraries and programs that Rhasspy will need to access.
 
 See [docker-kaldi](https://github.com/synesthesiam/docker-kaldi) for a Docker build script.
-
-### MITLM
-
-Download [mitlm 0.4.2](https://github.com/mitlm/mitlm/releases) from Github and extract it:
-
-```bash
-wget 'https://github.com/mitlm/mitlm/releases/download/v0.4.2/mitlm-0.4.2.tar.xz'
-tar -xvf mitlm-0.4.2.tar.xz
-```
-
-Make sure you have the necessary dependencies installed:
-
-```bash
-sudo apt-get install \
-    build-essential \
-    automake autoconf-archive libtool \
-    gfortran
-```
-
-Build and install:
-
-```bash
-cd mitlm-0.4.2
-./autogen.sh
-make
-make install
-```
-
-Use `make -j 4` if you have multiple CPU cores.
-
-You should now be able to run the `estimate-ngram` program.
-
-See [docker-mitlm](https://github.com/synesthesiam/docker-mitlm) for a Docker build script.
 
 ### Phonetisaurus
 
