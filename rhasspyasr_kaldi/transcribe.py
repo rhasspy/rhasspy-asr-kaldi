@@ -2,6 +2,7 @@
 import io
 import logging
 import os
+import shlex
 import socket
 import subprocess
 import tempfile
@@ -39,12 +40,16 @@ class KaldiCommandLineTranscriber(Transcriber):
         graph_dir: typing.Union[str, Path],
         port_num: typing.Optional[int] = None,
         kaldi_dir: typing.Optional[Path] = None,
+        kaldi_args: typing.Optional[typing.Dict[str, typing.Any]] = None,
     ):
         self.model_type = model_type
         self.model_dir = Path(model_dir)
         self.graph_dir = Path(graph_dir)
         self.decode_proc = None
         self.port_num = 5050 if port_num is None else port_num
+
+        # Additional arguments passed to Kaldi process
+        self.kaldi_args = kaldi_args
 
         if kaldi_dir is None:
             if "KALDI_DIR" in os.environ:
@@ -95,14 +100,20 @@ class KaldiCommandLineTranscriber(Transcriber):
             str(self.kaldi_dir / "online2-wav-nnet3-latgen-faster"),
             "--online=false",
             "--do-endpointing=false",
-            f"--word-symbol-table={words_txt}",
-            f"--config={online_conf}",
-            str(self.model_dir / "model" / "final.mdl"),
-            str(self.graph_dir / "HCLG.fst"),
+            shlex.quote(f"--word-symbol-table={words_txt}"),
+            shlex.quote(f"--config={online_conf}"),
+            shlex.quote(str(self.model_dir / "model" / "final.mdl")),
+            shlex.quote(str(self.graph_dir / "HCLG.fst")),
             "ark:echo utt1 utt1|",
-            f"scp:echo utt1 {wav_path}|",
+            shlex.quote(f"scp:echo utt1 {wav_path}|"),
             "ark:/dev/null",
         ]
+
+        # Add custom arguments
+        if self.kaldi_args:
+            for arg_name, arg_value in self.kaldi_args.items():
+                kaldi_command.append(shlex.quote(f"--{arg_name}={arg_value}"))
+
         _LOGGER.debug(kaldi_cmd)
 
         try:
@@ -236,8 +247,16 @@ class KaldiCommandLineTranscriber(Transcriber):
             _LOGGER.debug("Finished stream. Getting transcription.")
 
             lines = client_file.read().decode().splitlines()
+            text = ""
+            _LOGGER.debug(lines)
+
             if lines:
-                text = lines[-1].strip()
+                # Find first non-blank line
+                for line in reversed(lines):
+                    line = line.strip()
+                    if line:
+                        text = line
+                        break
             else:
                 # No result
                 text = ""
@@ -286,18 +305,25 @@ class KaldiCommandLineTranscriber(Transcriber):
         kaldi_cmd = [
             str(self.kaldi_dir / "online2-tcp-nnet3-decode-faster"),
             f"--port-num={self.port_num}",
-            f"--config={online_conf}",
+            shlex.quote(f"--config={online_conf}"),
             "--frame-subsampling-factor=3",
-            "--min-active=200",
-            "--max-active=2500",
+            # "--min-active=200",
+            # "--max-active=2500",
+            "--max-active=7000",
             "--lattice-beam=8.0",
             "--acoustic-scale=1.0",
             "--beam=24.0",
-            "--chunk-length=0.25",
-            str(self.model_dir / "model" / "final.mdl"),
-            str(self.graph_dir / "HCLG.fst"),
-            str(self.graph_dir / "words.txt"),
+            # "--chunk-length=0.25",
+            shlex.quote(str(self.model_dir / "model" / "final.mdl")),
+            shlex.quote(str(self.graph_dir / "HCLG.fst")),
+            shlex.quote(str(self.graph_dir / "words.txt")),
         ]
+
+        # Add custom arguments
+        if self.kaldi_args:
+            for arg_name, arg_value in self.kaldi_args.items():
+                kaldi_command.append(shlex.quote(f"--{arg_name}={arg_value}"))
+
         _LOGGER.debug(kaldi_cmd)
 
         self.decode_proc = subprocess.Popen(
