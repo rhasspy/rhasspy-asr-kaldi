@@ -48,6 +48,8 @@ class KaldiCommandLineTranscriber(Transcriber):
         self.decode_proc = None
         self.port_num = 5050 if port_num is None else port_num
 
+        self.timeout_seconds = 20
+
         # Additional arguments passed to Kaldi process
         self.kaldi_args = kaldi_args
 
@@ -112,7 +114,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         # Add custom arguments
         if self.kaldi_args:
             for arg_name, arg_value in self.kaldi_args.items():
-                kaldi_command.append(shlex.quote(f"--{arg_name}={arg_value}"))
+                kaldi_cmd.append(shlex.quote(f"--{arg_name}={arg_value}"))
 
         _LOGGER.debug(kaldi_cmd)
 
@@ -230,6 +232,7 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             # Connect to decoder
             client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.settimeout(self.timeout_seconds)
             client_socket.connect(("localhost", self.port_num))
             client_file = client_socket.makefile(mode="rb")
 
@@ -251,12 +254,11 @@ class KaldiCommandLineTranscriber(Transcriber):
             _LOGGER.debug(lines)
 
             if lines:
-                # Find first non-blank line
+                # Find longest line
                 for line in reversed(lines):
                     line = line.strip()
-                    if line:
+                    if len(line) > len(text):
                         text = line
-                        break
             else:
                 # No result
                 text = ""
@@ -322,7 +324,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         # Add custom arguments
         if self.kaldi_args:
             for arg_name, arg_value in self.kaldi_args.items():
-                kaldi_command.append(shlex.quote(f"--{arg_name}={arg_value}"))
+                kaldi_cmd.append(shlex.quote(f"--{arg_name}={arg_value}"))
 
         _LOGGER.debug(kaldi_cmd)
 
