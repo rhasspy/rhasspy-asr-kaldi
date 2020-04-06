@@ -17,6 +17,18 @@ _LOGGER = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 
 
+def get_kaldi_dir() -> Path:
+    """Get directory to Kaldi installation."""
+    # Check environment variable
+    if "KALDI_DIR" in os.environ:
+        return Path(os.environ["KALDI_DIR"])
+
+    return _DIR / "kaldi"
+
+
+# -----------------------------------------------------------------------------
+
+
 def train(
     graph: nx.DiGraph,
     pronunciations: PronunciationsType,
@@ -33,6 +45,13 @@ def train(
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
+
+    # Determine directory with Kaldi binaries
+    if kaldi_dir is None:
+        kaldi_dir = get_kaldi_dir()
+
+    assert kaldi_dir is not None
+    _LOGGER.debug("Using kaldi at %s", str(kaldi_dir))
 
     vocabulary: typing.Set[str] = set()
 
@@ -94,13 +113,14 @@ def train_kaldi(
     graph_dir: typing.Union[str, Path],
     dictionary: typing.Union[str, Path],
     language_model: typing.Union[str, Path],
-    kaldi_dir: typing.Optional[Path] = None,
+    kaldi_dir: typing.Union[str, Path],
 ):
     """Generates HCLG.fst from dictionary and language model."""
 
     # Convert to paths
     model_dir = Path(model_dir)
     graph_dir = Path(graph_dir)
+    kaldi_dir = Path(kaldi_dir)
 
     # -------------------------------------------------------------------------
     # Kaldi Training
@@ -110,17 +130,6 @@ def train_kaldi(
     # 3. mkgraph.sh
     # 4. prepare_online_decoding.sh
     # ---------------------------------------------------------
-
-    # Determine directory with Kaldi binaries
-    if kaldi_dir is None:
-        # Check environment variable
-        if "KALDI_DIR" in os.environ:
-            kaldi_dir = Path(os.environ["KALDI_DIR"])
-        else:
-            kaldi_dir = _DIR / "kaldi"
-
-    assert kaldi_dir is not None
-    _LOGGER.debug("Using kaldi at %s", str(kaldi_dir))
 
     # Extend PATH
     egs_utils_dir = kaldi_dir / "egs" / "wsj" / "s5" / "utils"
@@ -215,9 +224,45 @@ def train_kaldi(
     subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
 
     # 4. prepare_online_decoding.sh
+    train_prepare_online_decoding(model_dir, lang_dir, kaldi_dir)
+
+
+def train_prepare_online_decoding(
+    model_dir: typing.Union[str, Path],
+    lang_dir: typing.Union[str, Path],
+    kaldi_dir: typing.Union[str, Path],
+):
+    """Prepare model for online decoding."""
+    model_dir = Path(model_dir)
+    kaldi_dir = Path(kaldi_dir)
+
+    # prepare_online_decoding.sh (nnet3 only)
     extractor_dir = model_dir / "extractor"
     if extractor_dir.is_dir():
-        # nnet3 only
+        # Extend PATH
+        egs_utils_dir = kaldi_dir / "egs" / "wsj" / "s5" / "utils"
+        extended_env = os.environ.copy()
+        extended_env["PATH"] = (
+            str(kaldi_dir) + ":" + str(egs_utils_dir) + ":" + extended_env["PATH"]
+        )
+
+        # Create empty path.sh
+        path_sh = model_dir / "path.sh"
+        if not path_sh.is_file():
+            path_sh.write_text("")
+
+        # Create utils link
+        model_utils_link = model_dir / "utils"
+
+        try:
+            # Can't use missing_ok in 3.6
+            model_utils_link.unlink()
+        except Exception:
+            pass
+
+        model_utils_link.symlink_to(egs_utils_dir, target_is_directory=True)
+
+        # Generate online.conf
         mfcc_conf = model_dir / "conf" / "mfcc_hires.conf"
         egs_steps_dir = kaldi_dir / "egs" / "wsj" / "s5" / "steps"
         prepare_online_decoding = [
@@ -232,7 +277,13 @@ def train_kaldi(
         ]
 
         _LOGGER.debug(prepare_online_decoding)
-        subprocess.check_call(prepare_online_decoding, cwd=model_dir, env=extended_env)
+        subprocess.run(
+            prepare_online_decoding,
+            cwd=model_dir,
+            env=extended_env,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
 
 
 # -----------------------------------------------------------------------------
