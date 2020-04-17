@@ -1,7 +1,6 @@
 """Automated speech recognition in Rhasspy using Kaldi."""
 import io
 import logging
-import os
 import shlex
 import socket
 import subprocess
@@ -13,6 +12,8 @@ from enum import Enum
 from pathlib import Path
 
 from rhasspyasr import Transcriber, Transcription
+
+from .train import get_kaldi_dir
 
 _DIR = Path(__file__).parent
 _LOGGER = logging.getLogger(__name__)
@@ -53,16 +54,12 @@ class KaldiCommandLineTranscriber(Transcriber):
         # Additional arguments passed to Kaldi process
         self.kaldi_args = kaldi_args
 
-        if kaldi_dir is None:
-            if "KALDI_DIR" in os.environ:
-                # Use directory from environment
-                self.kaldi_dir = Path(os.environ["KALDI_DIR"])
-            else:
-                # Use bundled Kaldi
-                self.kaldi_dir = _DIR / "kaldi"
-        else:
+        if kaldi_dir:
             # Use directory from __init__
             self.kaldi_dir = kaldi_dir
+        else:
+            # Use environment or bundled
+            self.kaldi_dir = get_kaldi_dir()
 
         _LOGGER.debug("Using kaldi at %s", str(self.kaldi_dir))
 
@@ -102,19 +99,23 @@ class KaldiCommandLineTranscriber(Transcriber):
             str(self.kaldi_dir / "online2-wav-nnet3-latgen-faster"),
             "--online=false",
             "--do-endpointing=false",
-            shlex.quote(f"--word-symbol-table={words_txt}"),
-            shlex.quote(f"--config={online_conf}"),
-            shlex.quote(str(self.model_dir / "model" / "final.mdl")),
-            shlex.quote(str(self.graph_dir / "HCLG.fst")),
+            "--max-active=7000",
+            "--lattice-beam=8.0",
+            "--acoustic-scale=1.0",
+            "--beam=24.0",
+            f"--word-symbol-table={words_txt}",
+            f"--config={online_conf}",
+            str(self.model_dir / "model" / "final.mdl"),
+            str(self.graph_dir / "HCLG.fst"),
             "ark:echo utt1 utt1|",
-            shlex.quote(f"scp:echo utt1 {wav_path}|"),
+            f"scp:echo utt1 {wav_path}|",
             "ark:/dev/null",
         ]
 
         # Add custom arguments
         if self.kaldi_args:
             for arg_name, arg_value in self.kaldi_args.items():
-                kaldi_cmd.append(shlex.quote(f"--{arg_name}={arg_value}"))
+                kaldi_cmd.append(f"--{arg_name}={arg_value}")
 
         _LOGGER.debug(kaldi_cmd)
 
@@ -307,7 +308,7 @@ class KaldiCommandLineTranscriber(Transcriber):
         kaldi_cmd = [
             str(self.kaldi_dir / "online2-tcp-nnet3-decode-faster"),
             f"--port-num={self.port_num}",
-            shlex.quote(f"--config={online_conf}"),
+            f"--config={online_conf}",
             "--frame-subsampling-factor=3",
             # "--min-active=200",
             # "--max-active=2500",
@@ -316,15 +317,15 @@ class KaldiCommandLineTranscriber(Transcriber):
             "--acoustic-scale=1.0",
             "--beam=24.0",
             # "--chunk-length=0.25",
-            shlex.quote(str(self.model_dir / "model" / "final.mdl")),
-            shlex.quote(str(self.graph_dir / "HCLG.fst")),
-            shlex.quote(str(self.graph_dir / "words.txt")),
+            str(self.model_dir / "model" / "final.mdl"),
+            str(self.graph_dir / "HCLG.fst"),
+            str(self.graph_dir / "words.txt"),
         ]
 
         # Add custom arguments
         if self.kaldi_args:
             for arg_name, arg_value in self.kaldi_args.items():
-                kaldi_cmd.append(shlex.quote(f"--{arg_name}={arg_value}"))
+                kaldi_cmd.append(f"--{arg_name}={arg_value}")
 
         _LOGGER.debug(kaldi_cmd)
 

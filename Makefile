@@ -8,9 +8,8 @@ DOWNLOAD_DIR = download
 
 version := $(shell cat VERSION)
 architecture := $(shell bash architecture.sh)
-platform = $(shell sh platform.sh)
 
-.PHONY: reformat check venv sdist dist downloads rhasspy-libs debian pyinstaller
+.PHONY: reformat check venv sdist dist downloads debian pyinstaller
 
 all: venv
 
@@ -24,14 +23,16 @@ reformat:
 check:
 	scripts/check-code.sh $(PYTHON_FILES)
 
-venv: downloads rhasspy-libs etc/kaldi_flat_files.txt etc/kaldi_dir_files.txt
+venv: downloads
 	scripts/create-venv.sh "$(architecture)"
 
 test:
 	scripts/run-tests.sh
 
-dist:
-	scripts/build-wheel.sh $(platform)
+sdist:
+	python3 setup.py sdist
+
+dist: sdist
 
 # -----------------------------------------------------------------------------
 # Debian
@@ -54,14 +55,4 @@ $(DOWNLOAD_DIR)/%.tar.gz:
 	mkdir -p "$(DOWNLOAD_DIR)"
 	scripts/download-dep.sh "$@"
 
-downloads: $(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz $(RHASSPY_DEPS)
-
-# Download pre-built Phonetisaurus binaries.
-$(DOWNLOAD_DIR)/phonetisaurus-2019-$(architecture).tar.gz:
-	mkdir -p "$(DOWNLOAD_DIR)"
-	curl -sSfL -o $@ "https://github.com/synesthesiam/docker-phonetisaurus/releases/download/v2019.1/phonetisaurus-2019-$(architecture).tar.gz"
-
-# Download pre-built MITLM binaries.
-$(DOWNLOAD_DIR)/mitlm-0.4.2-$(architecture).tar.gz:
-	mkdir -p "$(DOWNLOAD_DIR)"
-	curl -sSfL -o $@ "https://github.com/synesthesiam/docker-mitlm/releases/download/v0.4.2/mitlm-0.4.2-$(architecture).tar.gz"
+downloads: $(RHASSPY_DEPS)
