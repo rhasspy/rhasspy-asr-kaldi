@@ -1,7 +1,6 @@
 """Automated speech recognition in Rhasspy using Kaldi."""
 import io
 import logging
-import shlex
 import socket
 import subprocess
 import tempfile
