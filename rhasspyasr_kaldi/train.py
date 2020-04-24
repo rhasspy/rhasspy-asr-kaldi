@@ -40,6 +40,7 @@ def train(
     g2p_model: typing.Optional[typing.Union[str, Path]] = None,
     g2p_word_transform: typing.Optional[typing.Callable[[str], str]] = None,
     missing_words_path: typing.Optional[Path] = None,
+    vocab_path: typing.Optional[typing.Union[str, Path]] = None,
     language_model_fst: typing.Optional[typing.Union[str, Path]] = None,
     base_language_model_fst: typing.Optional[typing.Union[str, Path]] = None,
     base_language_model_weight: typing.Optional[float] = None,
@@ -58,6 +59,13 @@ def train(
     _LOGGER.debug("Using kaldi at %s", str(kaldi_dir))
 
     vocabulary: typing.Set[str] = set()
+    if vocab_path:
+        vocab_file = open(vocab_path, "w+")
+    else:
+        vocab_file = typing.cast(
+            typing.TextIO, tempfile.NamedTemporaryFile(suffix=".txt", mode="w+")
+        )
+        vocab_path = vocab_file.name
 
     # Language model mixing
     is_mixing = False
@@ -72,13 +80,13 @@ def train(
 
     # Begin training
     with tempfile.NamedTemporaryFile(mode="w+") as lm_file:
-        with tempfile.NamedTemporaryFile(mode="w+") as vocab_file:
+        with vocab_file:
             # Create language model
             _LOGGER.debug("Converting to ARPA language model")
             rhasspynlu.arpa_lm.graph_to_arpa(
                 graph,
                 lm_file.name,
-                vocab_file.name,
+                vocab_path=vocab_path,
                 model_path=language_model_fst,
                 base_fst_weight=base_fst_weight,
                 merge_path=mixed_language_model_fst,
