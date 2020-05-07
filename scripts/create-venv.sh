@@ -65,7 +65,7 @@ echo 'Installing Phonetisaurus'
 # Install Kaldi
 echo 'Installing Kaldi'
 "${src_dir}/scripts/install-kaldi.sh" \
-    "$(cat kaldiroot | envsubst)" \
+    "$(envsubst <kaldiroot)" \
     "${src_dir}/etc/kaldi_flat_files.txt" \
     "${src_dir}/etc/kaldi_dir_files.txt" \
     "${src_dir}/${python_name}"
