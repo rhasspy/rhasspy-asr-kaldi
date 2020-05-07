@@ -7,10 +7,10 @@
 # - aarch64 (Raspberry Pi 3B+, 4)
 # - armv6l (Raspberry Pi 1, Zero, Zero W)
 
-if [[ ! -z "$1" ]]; then
+if [[ -n "$1" ]]; then
     cpu_arch="$1"
 else
-    cpu_arch="$(uname -m)"
+    cpu_arch="$(uname --m)"
 fi
 
 # Try lookup table first
