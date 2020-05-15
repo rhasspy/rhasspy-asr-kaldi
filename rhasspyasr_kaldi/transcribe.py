@@ -130,7 +130,9 @@ class KaldiCommandLineTranscriber(Transcriber):
         text = ""
         for line in lines:
             if line.startswith("utt1 "):
-                text = line.split(maxsplit=1)[1]
+                parts = line.split(maxsplit=1)
+                if len(parts) > 1:
+                    text = parts[1]
                 break
 
         return text
@@ -210,7 +212,9 @@ class KaldiCommandLineTranscriber(Transcriber):
             text = ""
             for line in lines:
                 if line.startswith("utt1 "):
-                    text = line.split(maxsplit=1)[1]
+                    parts = line.split(maxsplit=1)
+                    if len(parts) > 1:
+                        text = parts[1]
                     break
 
             return text
