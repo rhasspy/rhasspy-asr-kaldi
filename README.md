@@ -14,9 +14,7 @@ Automated speech recognition in [Rhasspy](https://github.com/synesthesiam/rhassp
 * [Opengrm](http://www.opengrm.org/twiki/bin/view/GRM/NGramLibrary)
 * [Phonetisaurus](https://github.com/AdolfVonKleist/Phonetisaurus)
 
-You can usually install Opengrm with `apt-get install libngram-tools`
-
-Kaldi and Phonetisaurus are included in the pre-built wheel.
+See [pre-built apps](https://github.com/synesthesiam/prebuilt-apps) for pre-compiled binaries.
 
 ## Transcribing
 
