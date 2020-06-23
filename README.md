@@ -5,16 +5,27 @@
 
 Automated speech recognition in [Rhasspy](https://github.com/synesthesiam/rhasspy) voice assistant with [Kaldi](http://kaldi-asr.org).
 
-## Dependencies
-
-`rhasspy-asr-pocketsphinx` requires:
+## Requirements
 
 * Python 3.7
 * [Kaldi](https://kaldi-asr.org)
+    * Expects `$KALDI_DIR` in environment
 * [Opengrm](http://www.opengrm.org/twiki/bin/view/GRM/NGramLibrary)
+    * Expects `ngram*` in `$PATH`
 * [Phonetisaurus](https://github.com/AdolfVonKleist/Phonetisaurus)
+    * Expects `phonetisaurus-apply` in `$PATH`
 
 See [pre-built apps](https://github.com/synesthesiam/prebuilt-apps) for pre-compiled binaries.
+
+## Installation
+
+```bash
+$ git clone https://github.com/rhasspy/rhasspy-asr-kaldi
+$ cd rhasspy-asr-kaldi
+$ ./configure
+$ make
+$ make install
+```
 
 ## Transcribing
 
@@ -42,7 +53,7 @@ optional arguments:
                         Number of frames to process at a time
 ```
 
-For nnet3 models, the `online2-tcp-nnet3-decode-faster` program is used to handle streaming audio. For gmm models, audio buffered and packaged as a WAV file before being transcribed.
+For nnet3 models, the `online2-tcp-nnet3-decode-faster` program is used to handle streaming audio. For gmm models, audio is buffered and packaged as a WAV file before being transcribed.
 
 ## Training
 
@@ -122,6 +133,8 @@ When using the `train` command, you will need to specify the following arguments
 
 * [Kaldi](http://kaldi-asr.org)
     * Speech to text engine
+* [Opengrm](http://www.opengrm.org/twiki/bin/view/GRM/NGramLibrary)
+    * Create ARPA language models
 * [Phonetisaurus](https://github.com/AdolfVonKleist/Phonetisaurus)
     * Guesses pronunciations for unknown words
 
