@@ -1,10 +1,12 @@
 """Methods for generating ASR artifacts."""
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import tempfile
 import typing
+from enum import Enum
 from pathlib import Path
 
 import networkx as nx
@@ -15,6 +17,13 @@ _DIR = Path(__file__).parent
 _LOGGER = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
+
+
+class LanguageModelType(str, Enum):
+    """Type of language model used to train Kaldi."""
+
+    ARPA = "arpa"
+    TEXT_FST = "text_fst"
 
 
 def get_kaldi_dir() -> Path:
@@ -47,6 +56,7 @@ def train(
     mixed_language_model_fst: typing.Optional[typing.Union[str, Path]] = None,
     balance_counts: bool = True,
     kaldi_dir: typing.Optional[Path] = None,
+    language_model_type: LanguageModelType = LanguageModelType.ARPA,
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -81,16 +91,20 @@ def train(
     # Begin training
     with tempfile.NamedTemporaryFile(mode="w+") as lm_file:
         with vocab_file:
-            # Create language model
-            _LOGGER.debug("Converting to ARPA language model")
-            rhasspynlu.arpa_lm.graph_to_arpa(
-                graph,
-                lm_file.name,
-                vocab_path=vocab_path,
-                model_path=language_model_fst,
-                base_fst_weight=base_fst_weight,
-                merge_path=mixed_language_model_fst,
-            )
+            if language_model_type == LanguageModelType.TEXT_FST:
+                _LOGGER.debug("Writing G.fst directly")
+                graph_to_g_fst(graph, lm_file, vocab_file)
+            else:
+                # Create language model from ARPA
+                _LOGGER.debug("Converting to ARPA language model")
+                rhasspynlu.arpa_lm.graph_to_arpa(
+                    graph,
+                    lm_file.name,
+                    vocab_path=vocab_path,
+                    model_path=language_model_fst,
+                    base_fst_weight=base_fst_weight,
+                    merge_path=mixed_language_model_fst,
+                )
 
             # Load vocabulary
             vocab_file.seek(0)
@@ -136,8 +150,89 @@ def train(
 
             # Generate HCLG.fst
             train_kaldi(
-                model_dir, graph_dir, dictionary, language_model, kaldi_dir=kaldi_dir
+                model_dir,
+                graph_dir,
+                dictionary,
+                language_model,
+                kaldi_dir=kaldi_dir,
+                language_model_type=language_model_type,
             )
+
+
+# -----------------------------------------------------------------------------
+
+
+def graph_to_g_fst(
+    graph: nx.DiGraph,
+    fst_file: typing.IO[str],
+    vocab_file: typing.IO[str],
+    eps: str = "<eps>",
+):
+    """
+    Write G.fst text file using intent graph.
+
+    Compiled later on with fstcompile.
+    """
+    vocabulary: typing.Set[str] = set()
+
+    n_data = graph.nodes(data=True)
+    final_states: typing.Set[int] = set()
+    state_map: typing.Dict[int, int] = {}
+
+    # start state
+    start_node: int = next(n for n, data in n_data if data.get("start"))
+
+    # Transitions
+    for _, intent_node in graph.edges(start_node):
+        # Map states starting from 0
+        from_state = state_map.get(start_node, len(state_map))
+        state_map[start_node] = from_state
+
+        to_state = state_map.get(intent_node, len(state_map))
+        state_map[intent_node] = to_state
+
+        print(f"{from_state} {to_state} {eps} {eps} 0.0", file=fst_file)
+
+        # Add intent sub-graphs
+        for edge in nx.edge_bfs(graph, intent_node):
+            edge_data = graph.edges[edge]
+            from_node, to_node = edge
+
+            # Get input/output labels.
+            # Empty string indicates epsilon transition (eps)
+            ilabel = edge_data.get("ilabel", "") or eps
+
+            # Check for whitespace
+            assert (
+                " " not in ilabel
+            ), f"Input symbol cannot contain whitespace: {ilabel}"
+
+            if ilabel != eps:
+                vocabulary.add(ilabel)
+
+            # Map states starting from 0
+            from_state = state_map.get(from_node, len(state_map))
+            state_map[from_node] = from_state
+
+            to_state = state_map.get(to_node, len(state_map))
+            state_map[to_node] = to_state
+
+            print(f"{from_state} {to_state} {ilabel} {ilabel} 0.0", file=fst_file)
+
+            # Check if final state
+            if n_data[from_node].get("final", False):
+                final_states.add(from_state)
+
+            if n_data[to_node].get("final", False):
+                final_states.add(to_state)
+
+    # Record final states
+    for final_state in final_states:
+        print(f"{final_state} 0.0", file=fst_file)
+
+    # Write vocabulary
+    for word in vocabulary:
+        print(word, file=vocab_file)
 
 
 # -----------------------------------------------------------------------------
@@ -149,6 +244,7 @@ def train_kaldi(
     dictionary: typing.Union[str, Path],
     language_model: typing.Union[str, Path],
     kaldi_dir: typing.Union[str, Path],
+    language_model_type: LanguageModelType = LanguageModelType.ARPA,
 ):
     """Generates HCLG.fst from dictionary and language model."""
 
@@ -161,7 +257,7 @@ def train_kaldi(
     # Kaldi Training
     # ---------------------------------------------------------
     # 1. prepare_lang.sh
-    # 2. format_lm.sh
+    # 2. format_lm.sh (or fstcompile)
     # 3. mkgraph.sh
     # 4. prepare_online_decoding.sh
     # ---------------------------------------------------------
@@ -226,26 +322,40 @@ def train_kaldi(
     _LOGGER.debug(prepare_lang)
     subprocess.check_call(prepare_lang, cwd=model_dir, env=extended_env)
 
-    # 2. format_lm.sh
-    lm_arpa = lang_local_dir / "lm.arpa"
-    lm_arpa.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(language_model, lm_arpa)
+    if language_model_type == LanguageModelType.TEXT_FST:
+        # 2. fstcompile > G.fst
+        compile_grammar = [
+            "fstcompile",
+            shlex.quote(f"--isymbols={lang_dir}/words.txt"),
+            shlex.quote(f"--osymbols={lang_dir}/words.txt"),
+            "--keep_isymbols=false",
+            "--keep_osymbols=false",
+            shlex.quote(str(language_model)),
+            shlex.quote(str(lang_dir / "G.fst")),
+        ]
 
-    gzip_lm = ["gzip", str(lm_arpa)]
-    _LOGGER.debug(gzip_lm)
-    subprocess.check_call(gzip_lm, cwd=lm_arpa.parent, env=extended_env)
+        subprocess.check_call(compile_grammar, cwd=model_dir, env=extended_env)
+    else:
+        # 2. format_lm.sh
+        lm_arpa = lang_local_dir / "lm.arpa"
+        lm_arpa.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(language_model, lm_arpa)
 
-    format_lm = [
-        "bash",
-        str(egs_utils_dir / "format_lm.sh"),
-        str(lang_dir),
-        str(lm_arpa.with_suffix(".arpa.gz")),
-        str(dict_local_dir / "lexicon.txt"),
-        str(lang_dir),
-    ]
+        gzip_lm = ["gzip", str(lm_arpa)]
+        _LOGGER.debug(gzip_lm)
+        subprocess.check_call(gzip_lm, cwd=lm_arpa.parent, env=extended_env)
 
-    _LOGGER.debug(format_lm)
-    subprocess.check_call(format_lm, cwd=model_dir, env=extended_env)
+        format_lm = [
+            "bash",
+            str(egs_utils_dir / "format_lm.sh"),
+            str(lang_dir),
+            str(lm_arpa.with_suffix(".arpa.gz")),
+            str(dict_local_dir / "lexicon.txt"),
+            str(lang_dir),
+        ]
+
+        _LOGGER.debug(format_lm)
+        subprocess.check_call(format_lm, cwd=model_dir, env=extended_env)
 
     # 3. mkgraph.sh
     mkgraph = [
