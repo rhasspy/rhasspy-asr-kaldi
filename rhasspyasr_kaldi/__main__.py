@@ -271,7 +271,7 @@ def get_word_transform(name: str) -> typing.Callable[[str], str]:
 
 def print_json(result):
     """Print data class as JSON"""
-    json.dump(dataclasses.asdict(result), sys.stdout)
+    json.dump(dataclasses.asdict(result), sys.stdout, ensure_ascii=False)
     print("")
     sys.stdout.flush()
 

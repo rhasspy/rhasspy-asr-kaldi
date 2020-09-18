@@ -116,6 +116,10 @@ def train(
 
         assert vocabulary, "No words in vocabulary"
 
+        # <unk>
+        vocabulary.add("<unk>")
+        pronunciations["<unk>"] = [["SPN"]]
+
         # Write dictionary to temporary file
         with tempfile.NamedTemporaryFile(mode="w+") as dictionary_file:
             _LOGGER.debug("Writing pronunciation dictionary")
@@ -314,7 +318,7 @@ def train_kaldi(
         "bash",
         str(egs_utils_dir / "prepare_lang.sh"),
         str(dict_local_dir),
-        "",
+        "<unk>",
         str(lang_local_dir),
         str(lang_dir),
     ]
