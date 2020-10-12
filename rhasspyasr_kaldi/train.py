@@ -57,6 +57,7 @@ def train(
     balance_counts: bool = True,
     kaldi_dir: typing.Optional[Path] = None,
     language_model_type: LanguageModelType = LanguageModelType.ARPA,
+    spn_phone: str = "SPN",
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -118,7 +119,7 @@ def train(
 
         # <unk>
         vocabulary.add("<unk>")
-        pronunciations["<unk>"] = [["SPN"]]
+        pronunciations["<unk>"] = [[spn_phone]]
 
         # Write dictionary to temporary file
         with tempfile.NamedTemporaryFile(mode="w+") as dictionary_file:
