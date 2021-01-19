@@ -1,7 +1,8 @@
 """Automated speech recognition in Rhasspy using Kaldi."""
 import io
+import itertools
 import logging
-import socket
+import os
 import subprocess
 import tempfile
 import time
@@ -10,7 +11,7 @@ import wave
 from enum import Enum
 from pathlib import Path
 
-from rhasspyasr import Transcriber, Transcription
+from rhasspyasr import Transcriber, Transcription, TranscriptionToken
 
 from .train import get_kaldi_dir
 
@@ -59,6 +60,10 @@ class KaldiCommandLineTranscriber(Transcriber):
         else:
             # Use environment or bundled
             self.kaldi_dir = get_kaldi_dir()
+
+        self.temp_dir = None
+        self.chunk_fifo_path = None
+        self.chunk_fifo_file = None
 
         _LOGGER.debug("Using kaldi at %s", str(self.kaldi_dir))
 
@@ -234,48 +239,67 @@ class KaldiCommandLineTranscriber(Transcriber):
             if not self.decode_proc:
                 self.start_decode()
 
-            # Connect to decoder
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.settimeout(self.timeout_seconds)
-            client_socket.connect(("localhost", self.port_num))
-            client_file = client_socket.makefile(mode="rb")
+            assert self.decode_proc, "No decode process"
 
             start_time = time.perf_counter()
             num_frames = 0
             for chunk in audio_stream:
                 if chunk:
-                    client_socket.sendall(chunk)
-                    num_frames += len(chunk) // sample_width
+                    num_samples = len(chunk) // sample_width
 
-            # Partial shutdown of socket (write only).
-            # This should force the Kaldi server to finalize the output.
-            client_socket.shutdown(socket.SHUT_WR)
+                    # Write sample count to process stdin
+                    print(num_samples, file=self.decode_proc.stdin)
+                    self.decode_proc.stdin.flush()
+
+                    # Write chunk to FIFO.
+                    # Make sure that we write exactly the right number of bytes.
+                    self.chunk_fifo_file.write(chunk[: num_samples * sample_width])
+                    self.chunk_fifo_file.flush()
+                    num_frames += num_samples
+
+            # Finish utterance
+            print("0", file=self.decode_proc.stdin)
+            self.decode_proc.stdin.flush()
 
             _LOGGER.debug("Finished stream. Getting transcription.")
 
-            lines = client_file.read().decode().splitlines()
-            text = ""
-            _LOGGER.debug(lines)
+            confidence_and_text = self.decode_proc.stdout.readline().strip()
+            _LOGGER.debug(confidence_and_text)
 
-            if lines:
-                # Find longest line
-                for line in reversed(lines):
-                    line = line.strip()
-                    if len(line) > len(text):
-                        text = line
-            else:
-                # No result
-                text = ""
-
-            if text:
+            if confidence_and_text:
                 # Success
                 end_time = time.perf_counter()
 
+                # <mbr_wer> <word> <word_confidence> <word_start_time> <word_end_time> ...
+                wer_str, *words = confidence_and_text.split()
+                confidence = 0.0
+
+                try:
+                    # Try to parse minimum bayes risk (MBR) word error rate (WER)
+                    confidence = max(0, 1 - float(wer_str))
+                except ValueError:
+                    _LOGGER.exception(wer_str)
+
+                tokens = []
+                for word, word_confidence, word_start_time, word_end_time in grouper(
+                    words, n=4
+                ):
+                    tokens.append(
+                        TranscriptionToken(
+                            token=word,
+                            start_time=float(word_start_time),
+                            end_time=float(word_end_time),
+                            likelihood=float(word_confidence),
+                        )
+                    )
+
+                text = " ".join(t.token for t in tokens)
                 return Transcription(
                     text=text,
-                    likelihood=1,
+                    likelihood=confidence,
                     transcribe_seconds=(end_time - start_time),
                     wav_seconds=(num_frames / sample_rate),
+                    tokens=tokens,
                 )
 
             # Failure
@@ -305,24 +329,40 @@ class KaldiCommandLineTranscriber(Transcriber):
             self.decode_proc.wait()
             self.decode_proc = None
 
+        if self.temp_dir:
+            self.temp_dir.cleanup()
+            self.temp_dir = None
+
+        if self.chunk_fifo_file:
+            self.chunk_fifo_file.close()
+            self.chunk_fifo_file = None
+
+        self.chunk_fifo_path = None
+
     def start_decode(self):
         """Starts online2-tcp-nnet3-decode-faster process."""
+        if self.temp_dir is None:
+            self.temp_dir = tempfile.TemporaryDirectory()
+
+        if self.chunk_fifo_path is None:
+            self.chunk_fifo_path = os.path.join(self.temp_dir.name, "chunks.fifo")
+            _LOGGER.debug("Creating FIFO at %s", self.chunk_fifo_path)
+            os.mkfifo(self.chunk_fifo_path)
+
         online_conf = self.model_dir / "online" / "conf" / "online.conf"
+
         kaldi_cmd = [
-            str(self.kaldi_dir / "online2-tcp-nnet3-decode-faster"),
-            f"--port-num={self.port_num}",
+            str(self.kaldi_dir / "online2-cli-nnet3-decode-faster-confidence"),
             f"--config={online_conf}",
             "--frame-subsampling-factor=3",
-            # "--min-active=200",
-            # "--max-active=2500",
             "--max-active=7000",
             "--lattice-beam=8.0",
             "--acoustic-scale=1.0",
             "--beam=24.0",
-            # "--chunk-length=0.25",
             str(self.model_dir / "model" / "final.mdl"),
             str(self.graph_dir / "HCLG.fst"),
             str(self.graph_dir / "words.txt"),
+            str(self.chunk_fifo_path),
         ]
 
         # Add custom arguments
@@ -334,17 +374,26 @@ class KaldiCommandLineTranscriber(Transcriber):
 
         self.decode_proc = subprocess.Popen(
             kaldi_cmd,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
             universal_newlines=True,
         )
+
+        # NOTE: The placement of this open is absolutely critical
+        #
+        # At this point, the decode process will block waiting for the other
+        # side of the pipe.
+        #
+        # We won't reach the "ready" stage if we open this earlier or later.
+        if self.chunk_fifo_file is None:
+            self.chunk_fifo_file = open(self.chunk_fifo_path, mode="wb")
 
         # Read until started
         line = self.decode_proc.stdout.readline().lower().strip()
         if line:
             _LOGGER.debug(line)
 
-        while "waiting for client" not in line:
+        while "ready" not in line:
             line = self.decode_proc.stdout.readline().lower().strip()
             if line:
                 _LOGGER.debug(line)
@@ -372,3 +421,10 @@ def get_wav_duration(wav_bytes: bytes) -> float:
             frames = wav_file.getnframes()
             rate = wav_file.getframerate()
             return frames / float(rate)
+
+
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    args = [iter(iterable)] * n
+    return itertools.zip_longest(*args, fillvalue=fillvalue)
