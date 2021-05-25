@@ -263,7 +263,14 @@ class KaldiCommandLineTranscriber(Transcriber):
 
             _LOGGER.debug("Finished stream. Getting transcription.")
 
-            confidence_and_text = self.decode_proc.stdout.readline().strip()
+            for line in self.decode_proc.stdout:
+                line = line.strip()
+                if line.lower() == "ready":
+                    continue
+
+                confidence_and_text = line
+                break
+
             _LOGGER.debug(confidence_and_text)
 
             if confidence_and_text:
