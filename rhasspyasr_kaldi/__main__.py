@@ -14,6 +14,7 @@ from rhasspynlu.g2p import PronunciationsType
 
 from . import KaldiCommandLineTranscriber
 from . import train as kaldi_train
+from .train import LanguageModelType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,11 +98,6 @@ def get_args() -> argparse.Namespace:
         "--intent-graph", help="Path to intent graph JSON file (default: stdin)"
     )
     train_parser.add_argument(
-        "--no-intent-graph",
-        action="store_true",
-        help="Use language model and dictionaries to generate HCLG.fst",
-    )
-    train_parser.add_argument(
         "--dictionary", help="Path to write custom pronunciation dictionary"
     )
     train_parser.add_argument(
@@ -124,6 +120,12 @@ def get_args() -> argparse.Namespace:
         choices=["upper", "lower", "ignore"],
         default="ignore",
         help="Case transformation for g2p words (training, default: ignore)",
+    )
+    train_parser.add_argument(
+        "--language-model-type",
+        default=LanguageModelType.TEXT_FST.value,
+        choices=[v.value for v in LanguageModelType],
+        help="Type of language model to use (default: text_fst)",
     )
 
     return parser.parse_args()
@@ -208,19 +210,25 @@ def train(args: argparse.Namespace):
 
     if args.dictionary:
         args.dictionary = Path(args.dictionary)
+    else:
+        args.dictionary = args.model_dir.parent / "dictionary.txt"
 
     if args.language_model:
         args.language_model = Path(args.language_model)
+    else:
+        args.language_model = args.model_dir.parent / "language_model.txt"
 
     if args.g2p_model:
         args.g2p_model = Path(args.g2p_model)
+    else:
+        args.g2p_model = args.model_dir.parent / "g2p.fst"
 
     if args.base_dictionary:
         args.base_dictionary = [Path(p) for p in args.base_dictionary]
     else:
-        args.base_dictionary = []
+        args.base_dictionary = [args.model_dir.parent / "base_dictionary.txt"]
 
-    graph_dict: typing.Optional[typing.Dict[str, typing.Any]] = None
+    graph: typing.Optional[nx.DiGraph] = None
     if args.intent_graph:
         # Load graph from file
         args.intent_graph = Path(args.intent_graph)
@@ -228,28 +236,34 @@ def train(args: argparse.Namespace):
         _LOGGER.debug("Loading intent graph from %s", args.intent_graph)
         with open(args.intent_graph, "r") as graph_file:
             graph_dict = json.load(graph_file)
-    elif not args.no_intent_graph:
+            graph = rhasspynlu.json_to_graph(graph_dict)
+    else:
         # Load graph from stdin
         if os.isatty(sys.stdin.fileno()):
             print("Reading intent graph from stdin...", file=sys.stderr)
 
         graph_dict = json.load(sys.stdin)
+        graph = rhasspynlu.json_to_graph(graph_dict)
+
+    assert graph is not None
 
     # Load base dictionaries
     pronunciations: PronunciationsType = {}
     for dict_path in args.base_dictionary:
         if os.path.exists(dict_path):
             _LOGGER.debug("Loading dictionary %s", str(dict_path))
-            rhasspynlu.g2p.read_pronunciations(dict_path, pronunciations)
+            with open(dict_path, "r") as dict_file:
+                rhasspynlu.g2p.read_pronunciations(dict_file, pronunciations)
 
     kaldi_train(
-        graph_dict,
+        graph,
         pronunciations,
         args.model_dir,
         args.graph_dir,
         dictionary_word_transform=get_word_transform(args.dictionary_casing),
         dictionary=args.dictionary,
         language_model=args.language_model,
+        language_model_type=args.language_model_type,
         g2p_model=args.g2p_model,
         g2p_word_transform=get_word_transform(args.g2p_casing),
     )
