@@ -60,6 +60,7 @@ def train(
     language_model_type: LanguageModelType = LanguageModelType.ARPA,
     spn_phone: str = "SPN",
     eps: str = "<eps>",
+    unk: str = "<unk>",
     unk_nonterm: str = "#nonterm:unk",
 ):
     """Re-generates HCLG.fst from intent graph"""
@@ -137,8 +138,8 @@ def train(
         assert vocabulary, "No words in vocabulary"
 
         # <unk>
-        vocabulary.add("<unk>")
-        pronunciations["<unk>"] = [[spn_phone]]
+        vocabulary.add(unk)
+        pronunciations[unk] = [[spn_phone]]
 
         # Write dictionary to temporary file
         with tempfile.NamedTemporaryFile(mode="w+") as dictionary_file:
@@ -181,6 +182,7 @@ def train(
                 kaldi_dir=kaldi_dir,
                 language_model_type=language_model_type,
                 eps=eps,
+                unk=unk,
                 unk_nonterm=unk_nonterm,
                 unk_vocabulary=unk_vocabulary,
             )
@@ -289,10 +291,9 @@ def train_kaldi(
     kaldi_dir: typing.Union[str, Path],
     language_model_type: LanguageModelType = LanguageModelType.ARPA,
     eps: str = "<eps>",
+    unk: str = "<unk>",
     unk_nonterm: str = "#nonterm:unk",
     unk_vocabulary: typing.Optional[typing.Set[str]] = None,
-    unk_begin: str = "<unk_begin>",
-    unk_end: str = "<unk_end>",
 ):
     """Generates HCLG.fst from dictionary and language model."""
     unk_vocabulary = unk_vocabulary or set()
@@ -345,10 +346,6 @@ def train_kaldi(
     # Copy dictionary
     shutil.copy(dictionary, dict_local_dir / "lexicon.txt")
 
-    with open(dict_local_dir / "lexicon.txt", "a") as lexicon_file:
-        for symbol in [unk_begin, unk_end]:
-            print(symbol, "SIL", file=lexicon_file)
-
     # Add non-terminals
     with open(dict_local_dir / "nonterminals.txt", "w") as nonterm_file:
         print(unk_nonterm, file=nonterm_file)
@@ -371,7 +368,7 @@ def train_kaldi(
         "bash",
         str(egs_utils_dir / "prepare_lang.sh"),
         str(dict_local_dir),
-        "<unk>",
+        unk,
         str(lang_local_dir),
         str(lang_dir),
     ]
@@ -414,7 +411,7 @@ def train_kaldi(
             "bash",
             str(egs_utils_dir / "prepare_lang.sh"),
             str(dict_unk_dir),
-            "<unk>",
+            unk,
             str(lang_temp_dir),
             str(lang_unk_dir),
         ]
@@ -424,12 +421,13 @@ def train_kaldi(
 
         lang_unk_fst = lang_unk_dir / "G.fst.txt"
         with open(lang_unk_fst, "w") as unk_fst_file:
-            print("0", "1", "#nonterm_begin", "<unk_begin>", 0.0, file=unk_fst_file)
-            print("2", "3", "#nonterm_end", "<unk_end>", 0.0, file=unk_fst_file)
+            # Enter/exit nonterminal
+            print("0", "1", "#nonterm_begin", eps, 0.0, file=unk_fst_file)
+            print("2", "3", "#nonterm_end", eps, 0.0, file=unk_fst_file)
 
             state = 4
             for word in unk_vocabulary:
-                print("1", state, word, word, 0.0, file=unk_fst_file)
+                print("1", state, word, unk, 0.0, file=unk_fst_file)
                 print(state, "2", eps, eps, 0.0, file=unk_fst_file)
 
             print("3", 0.0, file=unk_fst_file)
