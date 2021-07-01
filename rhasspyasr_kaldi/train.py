@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import typing
 from enum import Enum
@@ -240,10 +241,13 @@ def graph_to_g_fst(
     if unk_prob <= 0:
         known_log_prob = 0.0
     else:
+        # Clamp to [0, 1)
+        unk_prob = max(0.0, min(1.0 - sys.float_info.epsilon, unk_prob))
         unk_log_prob = -math.log(unk_prob)
         known_log_prob = -math.log(1.0 - unk_prob)
 
     if sil_prob > 0:
+        sil_prob = max(0.0, min(1.0 - sys.float_info.epsilon, sil_prob))
         sil_log_prob = -math.log(sil_prob)
 
     n_data = graph.nodes(data=True)
