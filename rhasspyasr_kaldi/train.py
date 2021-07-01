@@ -66,6 +66,7 @@ def train(
     unk: str = "<unk>",
     sil: str = "<sil>",
     unk_nonterm: str = "#nonterm:unk",
+    unk_prob: float = 1e-10,
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -114,6 +115,7 @@ def train(
                     eps=eps,
                     unk_nonterm=unk_nonterm,
                     allow_unknown_words=allow_unknown_words,
+                    unk_prob=unk_prob,
                 )
             else:
                 # Create language model from ARPA
