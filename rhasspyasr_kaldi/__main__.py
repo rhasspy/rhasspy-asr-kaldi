@@ -9,7 +9,9 @@ import typing
 import wave
 from pathlib import Path
 
+import networkx as nx
 import rhasspynlu
+from rhasspyasr import Transcription
 from rhasspynlu.g2p import PronunciationsType
 
 from . import KaldiCommandLineTranscriber
@@ -127,6 +129,11 @@ def get_args() -> argparse.Namespace:
         choices=[v.value for v in LanguageModelType],
         help="Type of language model to use (default: text_fst)",
     )
+    train_parser.add_argument(
+        "--unknown-words",
+        action="store_true",
+        help="Enable unknown words with text_fst",
+    )
 
     return parser.parse_args()
 
@@ -157,7 +164,9 @@ def transcribe(args: argparse.Namespace):
                 wav_bytes = open(wav_path, "rb").read()
                 result = transcriber.transcribe_wav(wav_bytes)
 
-                assert result
+                if not result:
+                    result = Transcription.empty()
+
                 print_json(result)
         else:
             # Read WAV data from stdin
@@ -255,6 +264,17 @@ def train(args: argparse.Namespace):
             with open(dict_path, "r") as dict_file:
                 rhasspynlu.g2p.read_pronunciations(dict_file, pronunciations)
 
+    # Load frequent words
+    frequent_words: typing.Optional[typing.Set[str]] = None
+    frequent_words_path = args.model_dir.parent / "frequent_words.txt"
+    if frequent_words_path.is_file():
+        frequent_words = set()
+        with open(frequent_words_path, "r") as frequent_words_file:
+            for line in frequent_words_file:
+                line = line.strip()
+                if line:
+                    frequent_words.add(line)
+
     kaldi_train(
         graph,
         pronunciations,
@@ -266,6 +286,8 @@ def train(args: argparse.Namespace):
         language_model_type=args.language_model_type,
         g2p_model=args.g2p_model,
         g2p_word_transform=get_word_transform(args.g2p_casing),
+        allow_unknown_words=args.unknown_words,
+        frequent_words=frequent_words,
     )
 
 

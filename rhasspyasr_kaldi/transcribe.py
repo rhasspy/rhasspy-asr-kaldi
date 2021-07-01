@@ -361,7 +361,6 @@ class KaldiCommandLineTranscriber(Transcriber):
         kaldi_cmd = [
             str(self.kaldi_dir / "online2-cli-nnet3-decode-faster-confidence"),
             f"--config={online_conf}",
-            "--frame-subsampling-factor=3",
             "--max-active=7000",
             "--lattice-beam=8.0",
             "--acoustic-scale=1.0",

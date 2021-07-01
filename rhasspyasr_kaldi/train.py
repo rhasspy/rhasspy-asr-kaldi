@@ -59,8 +59,12 @@ def train(
     kaldi_dir: typing.Optional[Path] = None,
     language_model_type: LanguageModelType = LanguageModelType.ARPA,
     spn_phone: str = "SPN",
+    sil_phone: str = "SIL",
     eps: str = "<eps>",
+    allow_unknown_words: bool = False,
+    frequent_words: typing.Optional[typing.Set[str]] = None,
     unk: str = "<unk>",
+    sil: str = "<sil>",
     unk_nonterm: str = "#nonterm:unk",
 ):
     """Re-generates HCLG.fst from intent graph"""
@@ -74,6 +78,9 @@ def train(
     _LOGGER.debug("Using kaldi at %s", str(kaldi_dir))
 
     vocabulary: typing.Set[str] = set()
+
+    # Words that "catch" unknown words outside vocabulary.
+    # Derived from frequent words in the language to get a good phoneme mix.
     unk_vocabulary: typing.Set[str] = set()
 
     if vocab_path:
@@ -101,7 +108,12 @@ def train(
             if language_model_type == LanguageModelType.TEXT_FST:
                 _LOGGER.debug("Writing G.fst directly")
                 graph_to_g_fst(
-                    graph, lm_file, vocab_file, eps=eps, unk_nonterm=unk_nonterm
+                    graph,
+                    lm_file,
+                    vocab_file,
+                    eps=eps,
+                    unk_nonterm=unk_nonterm,
+                    allow_unknown_words=allow_unknown_words,
                 )
             else:
                 # Create language model from ARPA
@@ -119,27 +131,35 @@ def train(
             vocab_file.seek(0)
             vocabulary.update(line.strip() for line in vocab_file)
 
-            if is_mixing or (language_model_type == LanguageModelType.TEXT_FST):
+            if is_mixing:
                 # Add all known words
-                # TODO: Use full vocab?
-                frequent_words = (
-                    line.strip()
-                    for line in (model_dir.parent / "frequent_words.txt")
-                    .read_text()
-                    .splitlines()
-                )
+                vocabulary.update(pronunciations.keys())
+            elif (
+                language_model_type == LanguageModelType.TEXT_FST
+            ) and allow_unknown_words:
+                # Create "unknown" vocabulary: words that are out of vocabulary,
+                # have a low probability of occurring, and will produce <unk> in
+                # the transcription.
                 all_vocabulary = set(pronunciations.keys())
-                unk_vocabulary = (
-                    set(frequent_words).intersection(all_vocabulary) - vocabulary
-                )
-                # unk_vocabulary = set(list(pronunciations.keys())[:1000]) - vocabulary
+                if frequent_words:
+                    unk_vocabulary = (
+                        set(frequent_words).intersection(all_vocabulary) - vocabulary
+                    )
+                else:
+                    unk_vocabulary = set()
+
+                unk_vocabulary.add(sil)
                 vocabulary.update(unk_vocabulary)
 
         assert vocabulary, "No words in vocabulary"
 
-        # <unk>
+        # <unk> - unknown word
         vocabulary.add(unk)
         pronunciations[unk] = [[spn_phone]]
+
+        # <sil> - silence
+        vocabulary.add(sil)
+        pronunciations[sil] = [[sil_phone]]
 
         # Write dictionary to temporary file
         with tempfile.NamedTemporaryFile(mode="w+") as dictionary_file:
@@ -182,6 +202,8 @@ def train(
                 kaldi_dir=kaldi_dir,
                 language_model_type=language_model_type,
                 eps=eps,
+                allow_unknown_words=allow_unknown_words,
+                sil=sil,
                 unk=unk,
                 unk_nonterm=unk_nonterm,
                 unk_vocabulary=unk_vocabulary,
@@ -196,6 +218,9 @@ def graph_to_g_fst(
     fst_file: typing.IO[str],
     vocab_file: typing.IO[str],
     eps: str = "<eps>",
+    sil: str = "<sil>",
+    sil_prob: float = 0.5,
+    allow_unknown_words: bool = False,
     unk_nonterm: str = "#nonterm:unk",
     unk_prob: float = 1e-10,
 ):
@@ -206,6 +231,8 @@ def graph_to_g_fst(
     """
     vocabulary: typing.Set[str] = set()
 
+    # Compute probabilities
+    sil_log_prob: typing.Optional[float] = None
     unk_log_prob: typing.Optional[float] = None
 
     if unk_prob <= 0:
@@ -213,6 +240,9 @@ def graph_to_g_fst(
     else:
         unk_log_prob = -math.log(unk_prob)
         known_log_prob = -math.log(1.0 - unk_prob)
+
+    if sil_prob > 0:
+        sil_log_prob = -math.log(sil_prob)
 
     n_data = graph.nodes(data=True)
     final_states: typing.Set[int] = set()
@@ -259,7 +289,7 @@ def graph_to_g_fst(
             print(from_state, to_state, ilabel, ilabel, known_log_prob, file=fst_file)
 
             # Unknown transition
-            if (unk_log_prob is not None) and (ilabel != eps):
+            if allow_unknown_words and (unk_log_prob is not None) and (ilabel != eps):
                 print(
                     from_state, to_state, unk_nonterm, eps, unk_log_prob, file=fst_file
                 )
@@ -274,6 +304,12 @@ def graph_to_g_fst(
     # Record final states
     for final_state in final_states:
         print(final_state, 0.0, file=fst_file)
+
+    if sil_log_prob is not None:
+        # Silence only transition
+        last_state = len(state_map)
+        print(state_map[start_node], last_state, sil, eps, sil_log_prob, file=fst_file)
+        print(last_state, 0.0, file=fst_file)
 
     # Write vocabulary
     for word in vocabulary:
@@ -291,6 +327,8 @@ def train_kaldi(
     kaldi_dir: typing.Union[str, Path],
     language_model_type: LanguageModelType = LanguageModelType.ARPA,
     eps: str = "<eps>",
+    sil: str = "<sil>",
+    allow_unknown_words: bool = False,
     unk: str = "<unk>",
     unk_nonterm: str = "#nonterm:unk",
     unk_vocabulary: typing.Optional[typing.Set[str]] = None,
@@ -346,9 +384,10 @@ def train_kaldi(
     # Copy dictionary
     shutil.copy(dictionary, dict_local_dir / "lexicon.txt")
 
-    # Add non-terminals
-    with open(dict_local_dir / "nonterminals.txt", "w") as nonterm_file:
-        print(unk_nonterm, file=nonterm_file)
+    if (language_model_type == LanguageModelType.TEXT_FST) and allow_unknown_words:
+        # Add non-terminals for unknown words
+        with open(dict_local_dir / "nonterminals.txt", "w") as nonterm_file:
+            print(unk_nonterm, file=nonterm_file)
 
     # Create utils link
     model_utils_link = model_dir / "utils"
@@ -376,6 +415,11 @@ def train_kaldi(
     _LOGGER.debug(prepare_lang)
     subprocess.check_call(prepare_lang, cwd=model_dir, env=extended_env)
 
+    # Directory with unknown grammar HCLG.fst
+    unk_graph_dir = graph_dir / "unk"
+    if unk_graph_dir.is_dir():
+        shutil.rmtree(unk_graph_dir)
+
     if language_model_type == LanguageModelType.TEXT_FST:
         # 2. fstcompile > G.fst
         compile_grammar = [
@@ -400,72 +444,76 @@ def train_kaldi(
 
         _LOGGER.debug(arcsort)
         subprocess.check_call(arcsort, cwd=model_dir, env=extended_env)
+        os.unlink(lang_dir / "G.fst.unsorted")
 
-        dict_unk_dir = data_local_dir / "dict_unk"
-        shutil.copytree(dict_local_dir, dict_unk_dir)
+        if allow_unknown_words:
+            # Create separate HCLG.fst for unknown words FST
+            dict_unk_dir = data_local_dir / "dict_unk"
+            shutil.copytree(dict_local_dir, dict_unk_dir)
 
-        # Create #nonterm:unk FST
-        lang_unk_dir = data_dir / "lang_unk"
-        lang_temp_dir = data_dir / "lang_tmp"
-        prepare_lang_unk = [
-            "bash",
-            str(egs_utils_dir / "prepare_lang.sh"),
-            str(dict_unk_dir),
-            unk,
-            str(lang_temp_dir),
-            str(lang_unk_dir),
-        ]
+            # Create #nonterm:unk FST
+            lang_unk_dir = data_dir / "lang_unk"
+            lang_temp_dir = data_dir / "lang_tmp"
+            prepare_lang_unk = [
+                "bash",
+                str(egs_utils_dir / "prepare_lang.sh"),
+                str(dict_unk_dir),
+                unk,
+                str(lang_temp_dir),
+                str(lang_unk_dir),
+            ]
 
-        _LOGGER.debug(prepare_lang_unk)
-        subprocess.check_call(prepare_lang_unk, cwd=model_dir, env=extended_env)
+            _LOGGER.debug(prepare_lang_unk)
+            subprocess.check_call(prepare_lang_unk, cwd=model_dir, env=extended_env)
 
-        lang_unk_fst = lang_unk_dir / "G.fst.txt"
-        with open(lang_unk_fst, "w") as unk_fst_file:
-            # Enter/exit nonterminal
-            print("0", "1", "#nonterm_begin", eps, 0.0, file=unk_fst_file)
-            print("2", "3", "#nonterm_end", eps, 0.0, file=unk_fst_file)
+            lang_unk_fst = lang_unk_dir / "G.fst.txt"
+            with open(lang_unk_fst, "w") as unk_fst_file:
+                # Enter/exit nonterminal
+                print("0", "1", "#nonterm_begin", eps, 0.0, file=unk_fst_file)
+                print("2", "3", "#nonterm_end", eps, 0.0, file=unk_fst_file)
 
-            state = 4
-            for word in unk_vocabulary:
-                print("1", state, word, unk, 0.0, file=unk_fst_file)
-                print(state, "2", eps, eps, 0.0, file=unk_fst_file)
+                state = 4
+                for word in unk_vocabulary:
+                    print("1", state, word, unk, 0.0, file=unk_fst_file)
+                    print(state, "2", eps, eps, 0.0, file=unk_fst_file)
 
-            print("3", 0.0, file=unk_fst_file)
+                print("3", 0.0, file=unk_fst_file)
 
-        compile_unk_grammar = [
-            "fstcompile",
-            shlex.quote(f"--isymbols={lang_unk_dir}/words.txt"),
-            shlex.quote(f"--osymbols={lang_unk_dir}/words.txt"),
-            "--keep_isymbols=false",
-            "--keep_osymbols=false",
-            shlex.quote(str(lang_unk_fst)),
-            shlex.quote(str(lang_unk_dir / "G.fst.unsorted")),
-        ]
+            compile_unk_grammar = [
+                "fstcompile",
+                shlex.quote(f"--isymbols={lang_unk_dir}/words.txt"),
+                shlex.quote(f"--osymbols={lang_unk_dir}/words.txt"),
+                "--keep_isymbols=false",
+                "--keep_osymbols=false",
+                shlex.quote(str(lang_unk_fst)),
+                shlex.quote(str(lang_unk_dir / "G.fst.unsorted")),
+            ]
 
-        _LOGGER.debug(compile_unk_grammar)
-        subprocess.check_call(compile_unk_grammar, cwd=model_dir, env=extended_env)
+            _LOGGER.debug(compile_unk_grammar)
+            subprocess.check_call(compile_unk_grammar, cwd=model_dir, env=extended_env)
 
-        arcsort = [
-            "fstarcsort",
-            "--sort_type=ilabel",
-            shlex.quote(str(lang_unk_dir / "G.fst.unsorted")),
-            shlex.quote(str(lang_unk_dir / "G.fst")),
-        ]
+            arcsort = [
+                "fstarcsort",
+                "--sort_type=ilabel",
+                shlex.quote(str(lang_unk_dir / "G.fst.unsorted")),
+                shlex.quote(str(lang_unk_dir / "G.fst")),
+            ]
 
-        _LOGGER.debug(arcsort)
-        subprocess.check_call(arcsort, cwd=model_dir, env=extended_env)
+            _LOGGER.debug(arcsort)
+            subprocess.check_call(arcsort, cwd=model_dir, env=extended_env)
+            os.unlink(lang_unk_dir / "G.fst.unsorted")
 
-        mkgraph_unk = [
-            "bash",
-            str(egs_utils_dir / "mkgraph.sh"),
-            "--self-loop-scale",
-            "1.0",
-            str(lang_unk_dir),
-            str(model_dir / "model"),
-            str(graph_dir / "unk"),
-        ]
-        _LOGGER.debug(mkgraph_unk)
-        subprocess.check_call(mkgraph_unk, cwd=model_dir, env=extended_env)
+            mkgraph_unk = [
+                "bash",
+                str(egs_utils_dir / "mkgraph.sh"),
+                "--self-loop-scale",
+                "1.0",
+                str(lang_unk_dir),
+                str(model_dir / "model"),
+                str(unk_graph_dir),
+            ]
+            _LOGGER.debug(mkgraph_unk)
+            subprocess.check_call(mkgraph_unk, cwd=model_dir, env=extended_env)
     else:
         # 2. format_lm.sh
         lm_arpa = lang_local_dir / "lm.arpa"
@@ -489,57 +537,75 @@ def train_kaldi(
         subprocess.check_call(format_lm, cwd=model_dir, env=extended_env)
 
     # 3. mkgraph.sh
-    mkgraph = [
-        "bash",
-        str(egs_utils_dir / "mkgraph.sh"),
-        "--self-loop-scale",
-        "1.0",
-        str(lang_dir),
-        str(model_dir / "model"),
-        str(graph_dir / "non_unk"),
-    ]
-    _LOGGER.debug(mkgraph)
-    subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
+    if not unk_graph_dir.is_dir():
+        # Without unknown words
+        mkgraph = [
+            "bash",
+            str(egs_utils_dir / "mkgraph.sh"),
+            "--self-loop-scale",
+            "1.0",
+            str(lang_dir),
+            str(model_dir / "model"),
+            str(graph_dir),
+        ]
+        _LOGGER.debug(mkgraph)
+        subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
+    else:
+        # With unknown words
+        non_unk_graph_dir = graph_dir / "non_unk"
+        mkgraph = [
+            "bash",
+            str(egs_utils_dir / "mkgraph.sh"),
+            "--self-loop-scale",
+            "1.0",
+            str(lang_dir),
+            str(model_dir / "model"),
+            str(non_unk_graph_dir),
+        ]
+        _LOGGER.debug(mkgraph)
+        subprocess.check_call(mkgraph, cwd=model_dir, env=extended_env)
 
-    # DEBUG
-    nonterm_offset = -1
-    nonterm_clist_offset = -1
+        # Determine nonterminal offsets
+        nonterm_offset = -1
+        nonterm_clist_offset = -1
 
-    with open(lang_dir / "phones.txt", "r") as phones_file:
-        for line in phones_file:
-            line = line.strip()
-            if not line:
+        with open(lang_dir / "phones.txt", "r") as phones_file:
+            for line in phones_file:
+                line = line.strip()
+                if not line:
+                    continue
+
+                phone, phone_num = line.split(maxsplit=1)
+                if phone == "#nonterm_bos":
+                    nonterm_offset = int(phone_num)
+                elif phone == unk_nonterm:
+                    nonterm_clist_offset = int(phone_num)
+
+        assert nonterm_offset >= 0
+        assert nonterm_clist_offset >= 0
+
+        # Write out as a non-grammar FST to be compatible with existing tooling.
+        # It will be faster and use less disk space in the future to use grammar
+        # FSTs.
+        make_grammar_fst = [
+            "make-grammar-fst",
+            f"--nonterm-phones-offset={nonterm_offset}",
+            "--write-as-grammar=false",
+            str(non_unk_graph_dir / "HCLG.fst"),
+            str(nonterm_clist_offset),
+            str(unk_graph_dir / "HCLG.fst"),
+            str(graph_dir / "HCLG.fst"),
+        ]
+        _LOGGER.debug(make_grammar_fst)
+        subprocess.check_call(make_grammar_fst, cwd=model_dir, env=extended_env)
+
+        # Move HCLG.fst and friends to where other tooling expects them
+        _LOGGER.debug("Moving graph files from %s to %s", non_unk_graph_dir, graph_dir)
+        for graph_path in non_unk_graph_dir.iterdir():
+            if graph_path.name == "HCLG.fst":
                 continue
 
-            phone, phone_num = line.split(maxsplit=1)
-            if phone == "#nonterm_bos":
-                nonterm_offset = int(phone_num)
-            elif phone == unk_nonterm:
-                nonterm_clist_offset = int(phone_num)
-
-    assert nonterm_offset >= 0
-    assert nonterm_clist_offset >= 0
-
-    make_grammar_fst = [
-        "make-grammar-fst",
-        f"--nonterm-phones-offset={nonterm_offset}",
-        "--write-as-grammar=false",
-        str(graph_dir / "non_unk" / "HCLG.fst"),
-        str(nonterm_clist_offset),
-        str(graph_dir / "unk" / "HCLG.fst"),
-        str(graph_dir / "HCLG.fst"),
-    ]
-    _LOGGER.debug(make_grammar_fst)
-    subprocess.check_call(make_grammar_fst, cwd=model_dir, env=extended_env)
-
-    for graph_path in (graph_dir / "non_unk").iterdir():
-        if graph_path.name == "HCLG.fst":
-            continue
-
-        if graph_path.is_dir():
-            shutil.copytree(graph_path, graph_dir / graph_path.name)
-        elif graph_path.is_file():
-            shutil.copy(graph_path, graph_dir)
+            shutil.move(str(graph_path), str(graph_dir))
 
     # 4. prepare_online_decoding.sh
     train_prepare_online_decoding(model_dir, lang_dir, kaldi_dir)
