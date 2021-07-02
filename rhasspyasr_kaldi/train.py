@@ -69,6 +69,7 @@ def train(
     unk_nonterm: str = "#nonterm:unk",
     unk_prob: float = 1e-10,
     sil_prob: float = 0.5,
+    unknown_token: str = "<unk>",
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -156,6 +157,12 @@ def train(
                 unk_vocabulary.add(sil)
                 vocabulary.update(unk_vocabulary)
 
+                vocabulary.add(unknown_token)
+
+                if unknown_token not in pronunciations:
+                    # Token must show up in lexicon
+                    pronunciations[unknown_token] = [[spn_phone]]
+
         assert vocabulary, "No words in vocabulary"
 
         # <unk> - unknown word
@@ -212,6 +219,7 @@ def train(
                 unk=unk,
                 unk_nonterm=unk_nonterm,
                 unk_vocabulary=unk_vocabulary,
+                unknown_token=unknown_token,
             )
 
 
@@ -303,10 +311,13 @@ def graph_to_g_fst(
                 )
 
             # Check if final state
-            if n_data[from_node].get("final", False):
+            is_from_final = n_data[from_node].get("final", False)
+            is_to_final = n_data[to_node].get("final", False)
+
+            if is_from_final:
                 final_states.add(from_state)
 
-            if n_data[to_node].get("final", False):
+            if is_to_final:
                 final_states.add(to_state)
 
     # Record final states
@@ -340,9 +351,11 @@ def train_kaldi(
     unk: str = "<unk>",
     unk_nonterm: str = "#nonterm:unk",
     unk_vocabulary: typing.Optional[typing.Set[str]] = None,
+    unknown_token: str = "<unk>",
 ):
     """Generates HCLG.fst from dictionary and language model."""
     unk_vocabulary = unk_vocabulary or set()
+    unknown_token = unknown_token or eps
 
     # Convert to paths
     model_dir = Path(model_dir)
@@ -482,7 +495,7 @@ def train_kaldi(
 
                 state = 4
                 for word in unk_vocabulary:
-                    print("1", state, word, unk, 0.0, file=unk_fst_file)
+                    print("1", state, word, unknown_token, 0.0, file=unk_fst_file)
                     print(state, "2", eps, eps, 0.0, file=unk_fst_file)
 
                 print("3", 0.0, file=unk_fst_file)
