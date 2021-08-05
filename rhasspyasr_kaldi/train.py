@@ -67,9 +67,10 @@ def train(
     unk: str = "<unk>",
     sil: str = "<sil>",
     unk_nonterm: str = "#nonterm:unk",
-    unk_prob: float = 1e-10,
+    unk_prob: float = 1e-5,
     sil_prob: float = 0.5,
     unknown_token: str = "<unk>",
+    max_unk_words: int = 8,
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -107,7 +108,8 @@ def train(
         base_fst_weight = (base_language_model_fst, base_language_model_weight)
 
     # Begin training
-    with tempfile.NamedTemporaryFile(mode="w+") as lm_file:
+    # with tempfile.NamedTemporaryFile(mode="w+") as lm_file:
+    with open("/tmp/fst.txt", mode="w+") as lm_file:
         with vocab_file:
             if language_model_type == LanguageModelType.TEXT_FST:
                 _LOGGER.debug("Writing G.fst directly")
@@ -120,6 +122,7 @@ def train(
                     allow_unknown_words=allow_unknown_words,
                     unk_prob=unk_prob,
                     sil_prob=sil_prob,
+                    max_unk_words=max_unk_words,
                 )
             else:
                 # Create language model from ARPA
@@ -220,6 +223,7 @@ def train(
                 unk_nonterm=unk_nonterm,
                 unk_vocabulary=unk_vocabulary,
                 unknown_token=unknown_token,
+                max_unk_words=max_unk_words,
             )
 
 
@@ -235,7 +239,8 @@ def graph_to_g_fst(
     sil_prob: float = 0.5,
     allow_unknown_words: bool = False,
     unk_nonterm: str = "#nonterm:unk",
-    unk_prob: float = 1e-10,
+    unk_prob: float = 1e-5,
+    max_unk_words: int = 8,
 ):
     """
     Write G.fst text file using intent graph.
@@ -248,17 +253,13 @@ def graph_to_g_fst(
     sil_log_prob: typing.Optional[float] = None
     unk_log_prob: typing.Optional[float] = None
 
-    if unk_prob <= 0:
-        known_log_prob = 0.0
-    else:
-        # Clamp to [0, 1)
-        unk_prob = max(0.0, min(1.0 - sys.float_info.epsilon, unk_prob))
-        unk_log_prob = -math.log(unk_prob)
-        known_log_prob = -math.log(1.0 - unk_prob)
-
     if sil_prob > 0:
         sil_prob = max(0.0, min(1.0 - sys.float_info.epsilon, sil_prob))
         sil_log_prob = -math.log(sil_prob)
+
+    if unk_prob > 0:
+        unk_prob = max(0.0, min(1.0 - sys.float_info.epsilon, unk_prob))
+        unk_log_prob = -math.log(unk_prob)
 
     n_data = graph.nodes(data=True)
     final_states: typing.Set[int] = set()
@@ -302,13 +303,7 @@ def graph_to_g_fst(
             to_state = state_map.get(to_node, len(state_map))
             state_map[to_node] = to_state
 
-            print(from_state, to_state, ilabel, ilabel, known_log_prob, file=fst_file)
-
-            # Unknown transition
-            if allow_unknown_words and (unk_log_prob is not None) and (ilabel != eps):
-                print(
-                    from_state, to_state, unk_nonterm, eps, unk_log_prob, file=fst_file
-                )
+            print(from_state, to_state, ilabel, ilabel, 0.0, file=fst_file)
 
             # Check if final state
             is_from_final = n_data[from_node].get("final", False)
@@ -324,10 +319,47 @@ def graph_to_g_fst(
     for final_state in final_states:
         print(final_state, 0.0, file=fst_file)
 
+    num_states = len(state_map)
+
     if sil_log_prob is not None:
         # Silence only transition
-        last_state = len(state_map)
+        last_state = num_states
+        num_states += 1
+
         print(state_map[start_node], last_state, sil, eps, sil_log_prob, file=fst_file)
+        print(last_state, 0.0, file=fst_file)
+
+    if allow_unknown_words and (unk_log_prob is not None):
+        # <start> -> <intent>
+        intent_state = num_states
+        num_states += 1
+        print(
+            state_map[start_node], intent_state, eps, eps, unk_log_prob, file=fst_file
+        )
+
+        # <intent> --[__intent__]-> ...
+        current_state = num_states
+        num_states = num_states + 1
+        print(intent_state, current_state, eps, eps, 0.0, file=fst_file)
+
+        last_state = num_states
+        num_states += 1
+
+        # Create a series of unknown words, with optional arcs to the final state
+        for unk_idx in range(max_unk_words):
+            next_state = num_states
+            num_states += 1
+
+            print(current_state, next_state, unk_nonterm, eps, 0.0, file=fst_file)
+
+            if unk_idx > 0:
+                # Optional word
+                print(current_state, last_state, eps, eps, 0.0, file=fst_file)
+
+            current_state = next_state
+
+        # Final state
+        print(current_state, last_state, eps, eps, 0.0, file=fst_file)
         print(last_state, 0.0, file=fst_file)
 
     # Write vocabulary
@@ -352,6 +384,7 @@ def train_kaldi(
     unk_nonterm: str = "#nonterm:unk",
     unk_vocabulary: typing.Optional[typing.Set[str]] = None,
     unknown_token: str = "<unk>",
+    max_unk_words: int = 8,
 ):
     """Generates HCLG.fst from dictionary and language model."""
     unk_vocabulary = unk_vocabulary or set()
@@ -490,13 +523,19 @@ def train_kaldi(
             lang_unk_fst = lang_unk_dir / "G.fst.txt"
             with open(lang_unk_fst, "w") as unk_fst_file:
                 # Enter/exit nonterminal
+                # 0 = start state
+                # 1 = begin words
+                # 2 = end words
+                # 3 = final state
+                # 4 = (eps) -[eps]-> (3)
+                # 5+ = (word) -[unk]-> (4)
                 print("0", "1", "#nonterm_begin", eps, 0.0, file=unk_fst_file)
                 print("2", "3", "#nonterm_end", eps, 0.0, file=unk_fst_file)
 
-                state = 4
                 for word in unk_vocabulary:
-                    print("1", state, word, unknown_token, 0.0, file=unk_fst_file)
-                    print(state, "2", eps, eps, 0.0, file=unk_fst_file)
+                    print("1", "4", word, unknown_token, 0.0, file=unk_fst_file)
+
+                print("4", "2", eps, eps, 0.0, file=unk_fst_file)
 
                 print("3", 0.0, file=unk_fst_file)
 
