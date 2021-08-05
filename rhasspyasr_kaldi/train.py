@@ -71,6 +71,8 @@ def train(
     sil_prob: float = 0.5,
     unknown_token: str = "<unk>",
     max_unk_words: int = 8,
+    cancel_word: typing.Optional[str] = None,
+    cancel_prob: float = 1e-2,
 ):
     """Re-generates HCLG.fst from intent graph"""
     g2p_word_transform = g2p_word_transform or (lambda s: s)
@@ -108,8 +110,7 @@ def train(
         base_fst_weight = (base_language_model_fst, base_language_model_weight)
 
     # Begin training
-    # with tempfile.NamedTemporaryFile(mode="w+") as lm_file:
-    with open("/tmp/fst.txt", mode="w+") as lm_file:
+    with tempfile.NamedTemporaryFile(mode="w+") as lm_file:
         with vocab_file:
             if language_model_type == LanguageModelType.TEXT_FST:
                 _LOGGER.debug("Writing G.fst directly")
@@ -118,11 +119,14 @@ def train(
                     lm_file,
                     vocab_file,
                     eps=eps,
+                    unk=unk,
                     unk_nonterm=unk_nonterm,
                     allow_unknown_words=allow_unknown_words,
                     unk_prob=unk_prob,
                     sil_prob=sil_prob,
                     max_unk_words=max_unk_words,
+                    cancel_word=cancel_word,
+                    cancel_prob=cancel_prob,
                 )
             else:
                 # Create language model from ARPA
@@ -176,6 +180,10 @@ def train(
         vocabulary.add(sil)
         pronunciations[sil] = [[sil_phone]]
 
+        if cancel_word:
+            # Word to cancel intent
+            vocabulary.add(cancel_word)
+
         # Write dictionary to temporary file
         with tempfile.NamedTemporaryFile(mode="w+") as dictionary_file:
             _LOGGER.debug("Writing pronunciation dictionary")
@@ -224,6 +232,8 @@ def train(
                 unk_vocabulary=unk_vocabulary,
                 unknown_token=unknown_token,
                 max_unk_words=max_unk_words,
+                cancel_word=cancel_word,
+                cancel_prob=cancel_prob,
             )
 
 
@@ -238,9 +248,12 @@ def graph_to_g_fst(
     sil: str = "<sil>",
     sil_prob: float = 0.5,
     allow_unknown_words: bool = False,
+    unk: str = "<unk>",
     unk_nonterm: str = "#nonterm:unk",
     unk_prob: float = 1e-5,
     max_unk_words: int = 8,
+    cancel_word: typing.Optional[str] = None,
+    cancel_prob: float = 1e-2,
 ):
     """
     Write G.fst text file using intent graph.
@@ -252,6 +265,7 @@ def graph_to_g_fst(
     # Compute probabilities
     sil_log_prob: typing.Optional[float] = None
     unk_log_prob: typing.Optional[float] = None
+    cancel_log_prob: typing.Optional[float] = None
 
     if sil_prob > 0:
         sil_prob = max(0.0, min(1.0 - sys.float_info.epsilon, sil_prob))
@@ -261,9 +275,19 @@ def graph_to_g_fst(
         unk_prob = max(0.0, min(1.0 - sys.float_info.epsilon, unk_prob))
         unk_log_prob = -math.log(unk_prob)
 
+    if cancel_prob > 0:
+        cancel_prob = max(0.0, min(1.0 - sys.float_info.epsilon, cancel_prob))
+        cancel_log_prob = -math.log(cancel_prob)
+
     n_data = graph.nodes(data=True)
     final_states: typing.Set[int] = set()
     state_map: typing.Dict[int, int] = {}
+
+    cancel_state: typing.Optional[int] = None
+    if cancel_word and (cancel_log_prob is not None):
+        cancel_state = len(state_map)
+        state_map[-len(state_map)] = cancel_state
+        final_states.add(cancel_state)
 
     # start state
     start_node: int = next(n for n, data in n_data if data.get("start"))
@@ -304,6 +328,16 @@ def graph_to_g_fst(
             state_map[to_node] = to_state
 
             print(from_state, to_state, ilabel, ilabel, 0.0, file=fst_file)
+
+            if cancel_state is not None:
+                print(
+                    from_state,
+                    cancel_state,
+                    cancel_word,
+                    unk,
+                    cancel_log_prob,
+                    file=fst_file,
+                )
 
             # Check if final state
             is_from_final = n_data[from_node].get("final", False)
@@ -385,6 +419,8 @@ def train_kaldi(
     unk_vocabulary: typing.Optional[typing.Set[str]] = None,
     unknown_token: str = "<unk>",
     max_unk_words: int = 8,
+    cancel_word: typing.Optional[str] = None,
+    cancel_prob: float = 1e-2,
 ):
     """Generates HCLG.fst from dictionary and language model."""
     unk_vocabulary = unk_vocabulary or set()
